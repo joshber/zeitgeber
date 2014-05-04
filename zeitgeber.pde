@@ -9,6 +9,7 @@ import processing.video.*;
 
 // ****** TODO --
 // Parameterize beat diameter per oscillator
+// Along with gain threshold
 // That way, with ease in / ease out, you could have a single oscillator model
 // that worked both as a pulse and a sine
 // D.h., when beat diamter == period, it's a sine

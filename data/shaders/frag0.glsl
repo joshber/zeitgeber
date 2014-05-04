@@ -23,7 +23,7 @@ uniform float threshold; // pivot for calculating gain expression, e.g. contrast
 // 5/2014: This may look like the Bad Way of doing things but--
 // - Processing shader API does not support array binding
 // - GLSL ES does not support looping over arrays (in GLSL < 4.0 array indices are const)
-// http://stackoverflow.com/questions/12030711/glsl-array-of-textures-of-differing-size/
+//   http://stackoverflow.com/questions/12030711/glsl-array-of-textures-of-differing-size/
 
 uniform sampler2D stream0;
 uniform sampler2D stream1;
@@ -80,6 +80,7 @@ void main() {
 	// Ease in / ease out depending on how close to center of beat
 	// to simulate (at lower cost) Fourier modeling of beat shape
 	// Use a sinusoidal
+	// -- NB, the WHOLE WAVE has to fit within the beat, from trough to trough
 
 	if ( onBeat0 > 0. ) {
 		c0.rgb = ( c0.rgb - threshold ) * gain0 + threshold;
