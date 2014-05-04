@@ -1,6 +1,8 @@
 {
-	"beatRadius": 21,
-	"gainThreshold": .8,
+	"fps": 60.,
+	
+	"beatRadius": 121.,
+	"gainThreshold": .5,
 
 	"shader": "frag0",
 

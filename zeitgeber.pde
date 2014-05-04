@@ -1,18 +1,17 @@
 // Zeitgeber v0.0001
 
-// TODO
-// Stream parameters should include "entrainability", d.h., probability of phase and period resetting
-// wrt other streams or external events
-// Perhaps multiple entrainabilities/stream ... for other streams, for camera events ...
-
 import java.util.Random;
 
 import processing.video.*;
 
-// BIG TODO
-// - Rewrite in terms of millis, not frames -- less aliasing etc
-// Encapsulate oscillator
-// Encapsulate zeitgeber too?
+// Longer-term TODO --
+// Clean up float / int thing in oscillator members
+
+// ****** TODO --
+// Parameterize beat diameter per oscillator
+// That way, with ease in / ease out, you could have a single oscillator model
+// that worked both as a pulse and a sine
+// D.h., when beat diamter == period, it's a sine
 
 // Two kinds of zeitgeber, ambient and event (pulse -- i.e., sudden sensor event)
 
@@ -22,8 +21,6 @@ import processing.video.*;
 
 // Phase is the only thing that responds to pulse zeitgeber
 // Again, a phase response curve -- logistic-type Hermite + Gaussian noise term
-
-// TODO: Could beat diamter vary too according?
 
 
 // Ok, from the latest notes (19.4.14)--
@@ -47,7 +44,7 @@ import processing.video.*;
 // All response curves also have a Gaussian error term
 
 
-Random theRNG; // Initialized in setup()
+Random theRNG; // For generating noise terms
 
 int halfbeat;
 int beat;
@@ -68,10 +65,9 @@ Oscillator[] oscillators;
 void setup() {
 	size( 720, 480, P2D );
 	colorMode( RGB, 1.0 );
-	frameRate( 60 );
 	noStroke();
 
-	theRNG = new Random(/* long seed */); // RNG for noise terms
+	theRNG = new Random(/* long seed */);
 
 	loadConfig();
 }
@@ -82,7 +78,8 @@ void draw() {
 	// Once a beat, check to see if any oscillators are on beat
 	if ( millis() % beat == 0 ) {
 		for ( int i = 0; i < nOscillators; ++i ) {
-			if ( oscillators[i].onBeat() ) {
+			double onBeat = oscillators[i].onBeat();
+			if ( onBeat > 0 ) {
 				// TODO See if the other oscillators want to entrain to this one
 			}
 		}
@@ -119,12 +116,14 @@ void keyPressed() {
 }
 
 void reloadConfig() {
-	// TODO: Cleanup from previous iteration to minimize memory leaks?
+	// TODO: Clean up from previous iteration to minimize memory leaks?
 	loadConfig();
 }
 
 void loadConfig() {
 	JSONObject config = loadJSONObject( "config.json" );
+
+	frameRate( config.getFloat( "fps" ) );
 
 	halfbeat = config.getInt( "beatRadius" );
 	beat = halfbeat * 2 - 1;
@@ -219,7 +218,7 @@ class Oscillator {
 	Oscillator(		int id_, Movie s_,
 					int period_, float phase_,
 					float gain_, PVector balance_,
-					float perRCh, float gainRCh
+					float perRCH, float gainRCH
 				) {
 		id = id_;
 		s = s_;
@@ -230,8 +229,8 @@ class Oscillator {
 		gain = gain_;
 		balance = balance_;
 		
-		periodRC_hysteresis = perRCh;
-		gainRC_hysteresis = gainRCh;
+		periodRC_hysteresis = perRCH;
+		gainRC_hysteresis = gainRCH;
 	}
 
 	void setShader( PShader sh ) {
@@ -246,8 +245,10 @@ class Oscillator {
 		sh.set( "balance" + id, balance );
 	}
 
-	boolean onBeat() {
-		return abs( millis() % ( period + beat ) - phase ) < halfbeat;
-			// + beat to handle edge-of-period half-beat problem
+	double onBeat() {
+		// Returns in interval [0,1] -- 0 off-beat, 1 at center of beat
+		return clamp( float( halfbeat - abs( millis() % ( period + beat ) - phase ) ), 0., float(halfbeat) )
+				/ float(halfbeat);
+			// period + beat to handle edge-of-period half-beat problem
 	}
 }

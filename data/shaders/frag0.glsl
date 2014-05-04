@@ -13,6 +13,7 @@ precision mediump int;
 //#define PROCESSING_TEXTURE_SHADER
 
 uniform vec2 resolution;
+
 uniform float halfbeat; // in milliseconds
 uniform float beat;
 
@@ -44,8 +45,9 @@ uniform vec3 balance0; // RGB for beat expression
 uniform vec3 balance1;
 uniform vec3 balance2;
 
-bool onBeat( float period, float phase ) {
-	return abs( mod( time, period + beat ) - phase ) < halfbeat;
+float onBeat( float period, float phase ) {
+	// Returns in interval [0,1] -- 0 off-beat, 1 at center of beat
+	return clamp( halfbeat - abs( mod( time, period + beat ) - phase ), 0., halfbeat ) / halfbeat;
 		// + beat to handle edge-of-period half-beat problem
 }
 
@@ -59,7 +61,7 @@ void main() {
 	// 1-texel offset for convolution filtering
 	vec2 off = vec2( 1. / resolution.s, 1. / resolution.t );
 
-	// Sample texture data for current pixel
+	// Sample texture data for current fragment
 	vec4 c0 = texture2D( stream0, pos );
 	vec4 c1 = texture2D( stream1, pos );
 	vec4 c2 = texture2D( stream2, pos );
@@ -70,27 +72,35 @@ void main() {
 
 	// Inspired by http://glsl.heroku.com/e#15220.0
 
-	if ( onBeat( period0, phase0 ) ) {
+	float onBeat0 = onBeat( period0, phase0 );
+	float onBeat1 = onBeat( period1, phase1 );
+	float onBeat2 = onBeat( period2, phase2 );
+
+	// TODO --
+	// Ease in / ease out depending on how close to center of beat
+	// to simulate (at lower cost) Fourier modeling of beat shape
+	// Use a sinusoidal
+
+	if ( onBeat0 > 0. ) {
 		c0.rgb = ( c0.rgb - threshold ) * gain0 + threshold;
 		c0.r *= balance0.r;
 		c0.g *= balance0.g;
 		c0.b *= balance0.b;
-			// FIXME: Check to make sure this is correct, swizzling may reverse vec3 order
-			// since GLSL is BGR
 	}
-	if ( onBeat( period1, phase1 ) ) {
+	if ( onBeat1 > 0. ) {
 		c1.rgb = ( c1.rgb - threshold ) * gain1 + threshold;
 		c1.r *= balance1.r;
 		c1.g *= balance1.g;
 		c1.b *= balance1.b;
 	}
-	if ( onBeat( period2, phase2 ) ) {
+	if ( onBeat2 > 0. ) {
 		c2.rgb = ( c2.rgb - threshold ) * gain2 + threshold;
 		c2.r *= balance2.r;
 		c2.g *= balance2.g;
 		c2.b *= balance2.b;
 	}
 
+	// TODO: Rethink
 	// Blend the textures
 	// We use a lighten blend, not a linear tween
 	// The video streams are characterized by dark backgrounds with bright shapes
