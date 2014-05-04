@@ -10,7 +10,7 @@
 			"period":				1000,
 			"phase":				0.,
 			"gain":					2.2,
-			"balance":				[ 1.5, 1., 1. ],
+			"balance":				[ 3., 1., 1. ],
 			"periodRC_hysteresis":	1.,
 			"gainRC_hysteresis":	1.
 		},
@@ -19,7 +19,7 @@
 			"period":				1000,
 			"phase":				0.,
 			"gain":					2.2,
-			"balance":				[ 1.5, 1., 1. ],
+			"balance":				[ 3., 1., 1. ],
 			"periodRC_hysteresis":	1.,
 			"gainRC_hysteresis":	1.
 		},
@@ -28,7 +28,7 @@
 			"period":				1000,
 			"phase":				0.,
 			"gain":					2.2,
-			"balance":				[ 1.5, 1., 1. ],
+			"balance":				[ 3., 1., 1. ],
 			"periodRC_hysteresis":	1.,
 			"gainRC_hysteresis":	1.
 		},

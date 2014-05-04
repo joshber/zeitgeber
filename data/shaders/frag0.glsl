@@ -19,9 +19,9 @@ uniform float beat;
 uniform float time; // milliseconds since the start of the draw() loop
 uniform float threshold; // pivot for calculating gain expression, e.g. contrast
 
-// This may look like the Bad Way of doing things but--
-// (5/2014) Processing shader API does not support array binding
-// + GLSL ES does not support looping over arrays (in GLSL < 4.0 array indices are const)
+// 5/2014: This may look like the Bad Way of doing things but--
+// - Processing shader API does not support array binding
+// - GLSL ES does not support looping over arrays (in GLSL < 4.0 array indices are const)
 // http://stackoverflow.com/questions/12030711/glsl-array-of-textures-of-differing-size/
 
 uniform sampler2D stream0;

@@ -14,12 +14,7 @@ import processing.video.*;
 // Encapsulate oscillator
 // Encapsulate zeitgeber too?
 
-// TODO
-// Check Blue Notebook, gegenüber QS-Dia-Bermerkungen, for latest
-// including antiphase phase shift, phase delay vs advance (takes quickest route toward entrainer),
-// gain dependence of phase shift (maybe a phase angle * gain term in the response curve)
-// plus, non-pulse (ambient) zeitgeber effects on period and gain (d.h. from environmental sensors)
-
+// Two kinds of zeitgeber, ambient and event (pulse -- i.e., sudden sensor event)
 
 // Period and gain change only in response to ambient zeitgeber, something like Temperature--
 // Could be noise in the room or total sensor activity ...
@@ -27,6 +22,8 @@ import processing.video.*;
 
 // Phase is the only thing that responds to pulse zeitgeber
 // Again, a phase response curve -- logistic-type Hermite + Gaussian noise term
+
+// TODO: Could beat diamter vary too according?
 
 
 // Ok, from the latest notes (19.4.14)--
