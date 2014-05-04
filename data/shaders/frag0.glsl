@@ -12,13 +12,12 @@ precision mediump int;
 #define PROCESSING_COLOR_SHADER
 //#define PROCESSING_TEXTURE_SHADER
 
-const int nStreams = 3;
-
 uniform vec2 resolution;
-uniform int halfbeat; // in ms
-uniform int beat;
+uniform float halfbeat; // in milliseconds
+uniform float beat;
 
-uniform int time; // ms since the start of the draw() loop
+uniform float time; // milliseconds since the start of the draw() loop
+uniform float threshold; // pivot for calculating gain expression, e.g. contrast
 
 // This may look like the Bad Way of doing things but--
 // (5/2014) Processing shader API does not support array binding
@@ -29,13 +28,13 @@ uniform sampler2D stream0;
 uniform sampler2D stream1;
 uniform sampler2D stream2;
 
-uniform int period0; // in ms
-uniform int period1;
-uniform int period2;
+uniform float period0; // in ms
+uniform float period1;
+uniform float period2;
 
-uniform int phase0; // in ms
-uniform int phase1;
-uniform int phase2;
+uniform float phase0; // in ms
+uniform float phase1;
+uniform float phase2;
 
 uniform float gain0; // 1-based, i.e. a coefficient
 uniform float gain1;
@@ -45,18 +44,9 @@ uniform vec3 balance0; // RGB for beat expression
 uniform vec3 balance1;
 uniform vec3 balance2;
 
-bool onBeat( int period, int phase ) {
-	return abs( time % ( period + beat ) - phase ) < halfbeat;
+bool onBeat( float period, float phase ) {
+	return abs( mod( time, period + beat ) - phase ) < halfbeat;
 		// + beat to handle edge-of-period half-beat problem
-}
-
-
-// Perlin's Hermite 6x^5 - 15x^4 + 10x^3
-float smootherstep( float a, float b, float x ) {
-    // Scale, and clamp x to 0..1 range
-    x = clamp( (x - a) / (b - a), 0., 1. );
-    // Evaluate polynomial
-    return x*x*x * (x * ( x*6 - 15 ) + 10);
 }
 
 void main() {
@@ -69,40 +59,45 @@ void main() {
 	// 1-texel offset for convolution filtering
 	vec2 off = vec2( 1. / resolution.s, 1. / resolution.t );
 
-	// Each stream has a tactus, and it flares on the beat
-	// as in http://glsl.heroku.com/e#15220.0 ... or contrast increases --
+	// Sample texture data for current pixel
+	vec4 c0 = texture2D( stream0, pos );
+	vec4 c1 = texture2D( stream1, pos );
+	vec4 c2 = texture2D( stream2, pos );
 
-	// Mathematical modeling of heartbeat-type spike rhythm
-	// http://www.intmath.com/blog/math-of-ecgs-fourier-series/4281
-	// Rather than calculate the Fourier expansion for O(streams) * O(pixels)
-	// can we simply fake it? If the R pulse lasts ~40ms
-	// if ( mod(time - phase * period, period) < .04 )
+	//
+	// For each stream, do something special if its oscillator is on-beat
+	// Right now the something special is just heightened contrast
 
-	// Could we also use a different kind of periodicity? Maybe physiological tremor?
+	// Inspired by http://glsl.heroku.com/e#15220.0
 
-	// Contrast
-	// color.rgb = ( (color.rgb - threshold) * max(contrast, 0) ) + threshold; // threshold normally .5
-	// For us, contrast == gain ≥ 1, so we can dispense with the max() ... maybe threshold == .8?
-	// Or use a red-shifting flare as http://glsl.heroku.com/e#15220.0
-	// -- just use different coefficients for the contrast on the r g and b
+	if ( onBeat( period0, phase0 ) ) {
+		c0.rgb = ( c0.rgb - threshold ) * gain0 + threshold;
+		c0.r *= balance0.r;
+		c0.g *= balance0.g;
+		c0.b *= balance0.b;
+			// FIXME: Check to make sure this is correct, swizzling may reverse vec3 order
+			// since GLSL is BGR
+	}
+	if ( onBeat( period1, phase1 ) ) {
+		c1.rgb = ( c1.rgb - threshold ) * gain1 + threshold;
+		c1.r *= balance1.r;
+		c1.g *= balance1.g;
+		c1.b *= balance1.b;
+	}
+	if ( onBeat( period2, phase2 ) ) {
+		c2.rgb = ( c2.rgb - threshold ) * gain2 + threshold;
+		c2.r *= balance2.r;
+		c2.g *= balance2.g;
+		c2.b *= balance2.b;
+	}
 
-	// Streams all have different intrinsic tau ... What keeps them entrained?
-	// As you reach out (via the Leap) a particular stream reaches back to you (via gain, period and speed?)
-	// What if the Leaps are tuned to the streams in random and changing fashion?
-
-	vec4 s0 = texture2D(stream0, pos);
-	vec4 s1 = texture2D(stream1, pos);
-	vec4 s2 = texture2D(stream2, pos);
-
+	// Blend the textures
 	// We use a lighten blend, not a linear tween
-	// The videos are characterized by dark backgrounds against which bright shapes emerge
+	// The video streams are characterized by dark backgrounds with bright shapes
 	// So a tween would mute the colors
-	vec4 blend = max( s0, max( s1, s2 ) );
+	vec4 blend = max( c0, max( c1, c2 ) );
 
-	// gl_FragColor = vec4(blend.rgb, 1.0) * vertColor;
-	gl_FragColor.rgb = blend.rgb;
-	gl_FragColor.a = 1.;
-	//gl_FragColor *= vertColor;
+	gl_FragColor = vec4( blend.rgb, 1. ) ; //* vertColor;
 }
 
 

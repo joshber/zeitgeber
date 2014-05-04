@@ -63,6 +63,8 @@ int beat;
 
 PShader shadr;
 
+float gainThreshold;
+
 int nOscillators;
 Oscillator[] oscillators;
 
@@ -74,53 +76,7 @@ void setup() {
 
 	theRNG = new Random(/* long seed */); // RNG for noise terms
 
-	JSONObject config = loadJSONObject( "config.json" );
-
-	halfbeat = config.getInt( "beatRadius" );
-	beat = halfbeat * 2 - 1;
-
-	// Shader setup
-	shadr = loadShader( "shaders/" + config.getString( "shader" ) + ".glsl" );
-	shadr.set( "resolution", float(width), float(height) );
-	shadr.set( "halfbeat", halfbeat );
-	shadr.set( "beat", beat );
-
-	// Configure the oscillators
-
-	JSONArray oscParams = config.getJSONArray( "oscillators" );
-
-	nOscillators = oscParams.size();
-	oscillators = new Oscillator[nOscillators];
-
-	for ( int i = 0; i < nOscillators; ++i ) {
-		JSONObject osc = oscParams.getJSONObject( i );
-
-		string streamHandle = osc.getString( "stream" );
-		int period = osc.getInt( "period" );
-		double phase = osc.getFloat( "phase" );
-		double gain = osc.getFloat( "gain" );
-		JSONArray blnc = osc.getJSONArray( "balance" );
-		double periodRCH = osc.getFloat( "periodRC_hysteresis" );
-		double gainRCH = osc.getFloat( "gainRC_hysteresis" );
-
-		// FIXME Will this work? Or do we need to get them as JSONObjects first?
-		PVector balance = new PVector( blnc.getFloat( 0 ), blnc.getFloat( 1 ), blnc.getFloat( 2 ) );
-
-		// Start the stream
-		Movie s = new Movie( this, "streams/" + streamHandle + ".mov" );
-		s.loop();
-
-		oscillators[i] = new Oscillator(
-									i,			// id
-									s,			// video stream
-									period,
-									phase,
-									gain,
-									balance
-									periodRCH,
-									gainRCH
-								);
-	}
+	loadConfig();
 }
 
 void draw() {
@@ -142,7 +98,8 @@ void draw() {
 		oscillators[i].setShader(shadr);
 	}
 
-	shadr.set( "time", millis() );
+	shadr.set( "time", float( millis() ) );
+		// Passed as float bc GLSL < 3.0 can't do modulus on ints
 
 	shader(shadr);
 	fill( color(1.,1.,1.) ); // gives us the option of * vertColor in frag shader
@@ -155,9 +112,80 @@ void movieEvent( Movie m ) {
 }
 void stop() {}
 
+//
+// Control and delegation
 
+void keyPressed() {
+	if ( key == 'r' || key == 'R' ) {
+		reloadConfig();
+	}
+}
+
+void reloadConfig() {
+	// TODO: Cleanup from previous iteration to minimize memory leaks?
+	loadConfig();
+}
+
+void loadConfig() {
+	JSONObject config = loadJSONObject( "config.json" );
+
+	halfbeat = config.getInt( "beatRadius" );
+	beat = halfbeat * 2 - 1;
+
+	gainThreshold = config.getFloat( "gainThreshold" );
+	
+	// Shader setup
+	shadr = loadShader( "shaders/" + config.getString( "shader" ) + ".glsl" );
+	shadr.set( "resolution", float(width), float(height) );
+
+	// At the moment, beat diameter is fixed -- But could be made mutable
+	// Passed as floats bc GLSL < 3.0 can't do mixed float-int arithmetic
+	shadr.set( "halfbeat", float(halfbeat) );
+	shadr.set( "beat", float(beat) );
+
+	shadr.set( "threshold", gainThreshold );
+
+	//
+	// Configure the oscillators
+
+	JSONArray oscParams = config.getJSONArray( "oscillators" );
+
+	nOscillators = oscParams.size();
+	oscillators = new Oscillator[nOscillators];
+
+	for ( int i = 0; i < nOscillators; ++i ) {
+		JSONObject osc = oscParams.getJSONObject( i );
+
+		String streamHandle = osc.getString( "stream" );
+		int period = osc.getInt( "period" );
+		float phase = osc.getFloat( "phase" );
+		float gain = osc.getFloat( "gain" );
+		JSONArray blnc = osc.getJSONArray( "balance" );
+		float periodRCH = osc.getFloat( "periodRC_hysteresis" );
+		float gainRCH = osc.getFloat( "gainRC_hysteresis" );
+
+		// FIXME Will this work? Or do we need to get them as JSONObjects first?
+		PVector balance = new PVector( blnc.getFloat( 0 ), blnc.getFloat( 1 ), blnc.getFloat( 2 ) );
+
+		// Start the stream
+		Movie s = new Movie( this, "streams/" + streamHandle + ".mov" );
+		s.loop();
+
+		oscillators[i] = new Oscillator(
+									i,			// id
+									s,			// video stream
+									period,
+									phase,
+									gain,
+									balance,
+									periodRCH,
+									gainRCH
+								);
+	}
+}
+
+//
 // Oscillator-related
-
 
 double clamp( double x, double a, double b ) {
 	return x < a ? a : x > b ? b : x;
@@ -165,7 +193,7 @@ double clamp( double x, double a, double b ) {
 
 double gnoise( double mean, double sd ) {
 	// Clamping at 6 sigma should not introduce too much squaring ...
-	return mean + sd * clamp( theRNG.nextGaussian(), -6, 6 );
+	return mean + sd * clamp( theRNG.nextGaussian(), -6., 6. );
 }
 
 // Perlin's Hermite 6x^5 - 15x^4 + 10x^3
@@ -183,24 +211,24 @@ class Oscillator {
 
 	int period, phase; // in ms
 
-	double gain; // 1-based, i.e., a coefficient
+	float gain; // 1-based, i.e., a coefficient
 	PVector balance; // RGB for beat expression
 
 	// Response curve hysteresis terms: > 0 means latency on descending values
-	double periodRC_hysteresis, gainRC_hysteresis;
+	float periodRC_hysteresis, gainRC_hysteresis;
 
 	Oscillator() { }
 
 	Oscillator(		int id_, Movie s_,
-					int period_, double phase_,
-					double gain, PVector balance_,
-					double perRCh, double gainRCh ) {
-
+					int period_, float phase_,
+					float gain_, PVector balance_,
+					float perRCh, float gainRCh
+				) {
 		id = id_;
 		s = s_;
 
 		period = period_;
-		phase = int(phase_ * period); // Map phase to period
+		phase = int( phase_ * period ); // Map phase to period
 		
 		gain = gain_;
 		balance = balance_;
@@ -212,8 +240,11 @@ class Oscillator {
 	void setShader( PShader sh ) {
 		PImage frame = s;
 		sh.set( "stream" + id, frame );
-		sh.set( "period" + id, period );
-		sh.set( "phase" + id, phase );
+
+		// Passed as floats bc GLSL < 3.0 can't do modulus on ints
+		sh.set( "period" + id, float(period) );
+		sh.set( "phase" + id, float(phase) );
+
 		sh.set( "gain" + id, gain );
 		sh.set( "balance" + id, balance );
 	}
@@ -222,76 +253,4 @@ class Oscillator {
 		return abs( millis() % ( period + beat ) - phase ) < halfbeat;
 			// + beat to handle edge-of-period half-beat problem
 	}
-}
-
-
-
-// FIXME WHAT FOLLOWS IS OLD AND WILL BE TAKEN OUT OR HARVESTED FOR SCRAP
-
-void updateOscillators() {
-	final double a = 1.;
-	final double b = 0.;
-
-	// Variance of underlying normal Y = log(X) for lognormal X
-	double sigma = cos(a * (double)millis()/1000. ) + b;
-
-	for ( int i = 0; i < N_OSC; ++i ) {
-		// TODO Adjust period
-		// - Symmetric period-length oscillator for each stream 
-		//   -- deterministic oscillation + Gaussian noise term
-
-		// maybePerturbPeriod ??
-
-		// TODO Maybe we need baseline periods, and perturbed periods anneal to baseline
-		// Or rather, baseline period range -- oscillation stays w/i range, perturbance
-		// kicks it out ( e.g. via entrainment )
-
-		// Maybe reset phase or entrain to one of the other streams
-		int neighbor;
-		if ( phaseReset(i) )
-			phase[i] = millis() % period[i];
-		else {
-			neighbor = maybeEntrain(i);
-			if ( neighbor > -1 ) {
-				phase[i] = millis() % period[i];
-				double weight = entrainability[i];
-				period[i] = round( period[neighbor] * weight + period[i] * (1 - weight) );
-			}
-		}
-
-		// Maybe perturb the gain, or anneal
-		double pert = gainPerturbance(i);
-		if ( pert > 0 )
-			gain[i] += pert;
-		else if ( gain[i] > gainBaseline[i] ) {
-			// simulated annealing ... do we need a per-stream annealing rate?
-		}
-	}
-}
-
-boolean phaseReset( int streamId ) {
-	return false;
-	// check sensors, maybe also small probability of randomly resetting?
-}
-
-int maybeEntrain( int streamId ) {
-	// Check neighbors. If any is on the beat, maybe entrain
-	for ( int i = 1; i < N_OSC; ++i ) {
-		int neighbor = (streamId + i) % N_OSC;
-		if ( onTheBeat(neighbor) ) {
-			if ( theRNG.nextDouble() < entrainability[i] )
-				return neighbor;
-		}
-	}
-	return -1;
-}
-
-boolean onTheBeat( int streamId ) {
-	return abs( millis() % ( period[streamId] + beat ) - phase[streamId] ) < halfbeat;
-		// + beat to handle the edge-of-period half-beat problem
-}
-
-double gainPerturbance( int streamId ) {
-	return 0.;
-	// check sensors, maybe also random noise
 }
