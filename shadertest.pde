@@ -9,13 +9,6 @@ import java.util.Random;
 
 import processing.video.*;
 
-final int SHADER_ID = 0;
-
-final int N_OSC = 3;
-
-final int halfbeat = 20; // in ms ... FIXME should this be 20 or 21?
-final int beat = 41;
-
 // BIG TODO
 // - Rewrite in terms of millis, not frames -- less aliasing etc
 // Encapsulate oscillator
@@ -57,11 +50,118 @@ final int beat = 41;
 // All response curves also have a Gaussian error term
 
 
+Random theRNG; // Initialized in setup()
+
+int halfbeat;
+int beat;
+	// In milliseconds. Actual half-beat is .5 less
+	// To see if an oscillator is on beat we test
+	// abs( millis() % ( period + beat ) - phase ) < halfbeat
+	// if == 0 we're exactly at the center of the beat
+	// otherwise need a half-beat radius around that exact center
+	// TODO: Would it be more intuitive to use <= halfbeat and have beat be 2*halfbeat + 1?
+
+PShader shadr;
+
+int nOscillators;
+Oscillator[] oscillators;
+
+void setup() {
+	size( 720, 480, P2D );
+	colorMode( RGB, 1.0 );
+	frameRate( 60 );
+	noStroke();
+
+	theRNG = new Random(/* long seed */); // RNG for noise terms
+
+	JSONObject config = loadJSONObject( "config.json" );
+
+	halfbeat = config.getInt( "beatRadius" );
+	beat = halfbeat * 2 - 1;
+
+	// Shader setup
+	shadr = loadShader( "shaders/" + config.getString( "shader" ) + ".glsl" );
+	shadr.set( "resolution", float(width), float(height) );
+	shadr.set( "halfbeat", halfbeat );
+	shadr.set( "beat", beat );
+
+	// Configure the oscillators
+
+	JSONArray oscParams = config.getJSONArray( "oscillators" );
+
+	nOscillators = oscParams.size();
+	oscillators = new Oscillator[nOscillators];
+
+	for ( int i = 0; i < nOscillators; ++i ) {
+		JSONObject osc = oscParams.getJSONObject( i );
+
+		string streamHandle = osc.getString( "stream" );
+		int period = osc.getInt( "period" );
+		double phase = osc.getFloat( "phase" );
+		double gain = osc.getFloat( "gain" );
+		JSONArray blnc = osc.getJSONArray( "balance" );
+		double periodRCH = osc.getFloat( "periodRC_hysteresis" );
+		double gainRCH = osc.getFloat( "gainRC_hysteresis" );
+
+		// FIXME Will this work? Or do we need to get them as JSONObjects first?
+		PVector balance = new PVector( blnc.getFloat( 0 ), blnc.getFloat( 1 ), blnc.getFloat( 2 ) );
+
+		// Start the stream
+		Movie s = new Movie( this, "streams/" + streamHandle + ".mov" );
+		s.loop();
+
+		oscillators[i] = new Oscillator(
+									i,			// id
+									s,			// video stream
+									period,
+									phase,
+									gain,
+									balance
+									periodRCH,
+									gainRCH
+								);
+	}
+}
+
+void draw() {
+	background( color(0.,0.,0.) );
+
+	// Once a beat, check to see if any oscillators are on beat
+	if ( millis() % beat == 0 ) {
+		for ( int i = 0; i < nOscillators; ++i ) {
+			if ( oscillators[i].onBeat() ) {
+				// TODO See if the other oscillators want to entrain to this one
+			}
+		}
+	}
+
+	// TODO: Handle sensor events
+
+	// Update shader uniforms with texture frame data and oscillator params
+	for ( int i = 0; i < nOscillators; ++i ) {
+		oscillators[i].setShader(shadr);
+	}
+
+	shadr.set( "time", millis() );
+
+	shader(shadr);
+	fill( color(1.,1.,1.) ); // gives us the option of * vertColor in frag shader
+	rect( 0, 0, width, height );
+}
+
+// Movie events
+void movieEvent( Movie m ) {
+	m.read();
+}
+void stop() {}
+
+
+// Oscillator-related
+
+
 double clamp( double x, double a, double b ) {
 	return x < a ? a : x > b ? b : x;
 }
-
-Random theRNG; // Initialized in setup()
 
 double gnoise( double mean, double sd ) {
 	// Clamping at 6 sigma should not introduce too much squaring ...
@@ -124,77 +224,9 @@ class Oscillator {
 	}
 }
 
-PShader shadr;
-Oscillator[] oscillators = new Oscillator[N_OSC];
-
-void setup() {
-	size( 720, 480, P2D );
-	colorMode( RGB, 1.0 );
-	frameRate(60);
-	noStroke();
-
-	theRNG = new Random(/* long SEED? */);
-
-	shadr = loadShader( "shaders/frag" + SHADER_ID + ".glsl" );
-
-	for ( int i = 0; i < N_OSC; ++i ) {
-		Movie s = new Movie( this, "streams/stream" + i + ".mov" );
-		s.loop();
-
-		// TODO Get oscillator parameters from a configuration JSON
-
-		oscillators[i] = new Oscillator(
-									i,							// id
-									s,							// video stream
-									1000,						// period
-									0.,							// phase
-									1.2,						// gain
-									new PVector(1.5,1.,1.),		// balance
-									1.,							// period RC hysteresis
-									1.							// gain RC hysteresis
-								);
-	}
-
-	shadr.set( "resolution", float(width), float(height) );
-	shadr.set( "halfbeat", halfbeat );
-	shadr.set( "beat", beat );
-}
-
-void draw() {
-	background( color(0.,0.,0.) );
-
-	// Once a beat, check to see if any oscillators are on beat
-	if ( millis() % beat == 0 ) {
-		for ( int i = 0; i < N_OSC; ++i ) {
-			if ( oscillators[i].onBeat() ) {
-				// TODO See if the other oscillators want to entrain to this one
-			}
-		}
-	}
-
-	// TODO
-	// Handle sensor events
-
-	for ( int i = 0; i < N_OSC; ++i ) {
-		oscillators[i].setShader(shadr);
-	}
-
-	shadr.set( "time", millis() );
-
-	shader(shadr);
-	fill( color(1.,1.,1.) ); // gives us option of * vertColor in frag shader
-	rect( 0, 0, width, height );
-}
-
-// Movie events
-void movieEvent( Movie m ) {
-	m.read();
-}
-void stop() {}
 
 
-// Oscillator-related
-
+// FIXME WHAT FOLLOWS IS OLD AND WILL BE TAKEN OUT OR HARVESTED FOR SCRAP
 
 void updateOscillators() {
 	final double a = 1.;
@@ -263,38 +295,3 @@ double gainPerturbance( int streamId ) {
 	return 0.;
 	// check sensors, maybe also random noise
 }
-
-
-
-//double lognormal( double sigma ) {
-//	return exp( sigma * theRNG.nextGaussian() );
-//}
-
-
-
-	//   -- maybe a Gaussian whose mean oscillates above and below zero
-	//   -- or a lognormal where sigma oscillates between .1 and 10 and flips sign whenever sigma
-	//      passes through 10 if ( sigma > 9.9 || prevSigma > 9.5 && sigma < prevSigma ) { Flip sign }
-	//      (so a singularity, but not noticeable)
-	//      5. * ( sin(a * ticks) + 1.05 ) where ticks == frameCount() / tickLength
-
-	// Maybe use relative phase to generate metastable relationships between oscillators?
-	// rel phase = ∂w - a sin(rel phase) - 2b sin (2 * rel phase) + sqrt(Q) * zeta
-	// where rel phase == relative phase between two interacting components
-	// a and b are parameters setting strength of attracting regions in the dynamical landscape
-	// sqrt(Q) * zeta == noise term of strength Q
-	// ∂w == symmetry breaking term expressing the fact that each element has its own intrinsic behavior
-
-	// But this is more appropriate as a description, not so good for generating behavior
-	// But maybe we could still use relative phase?
-
-	// Update: No. All we need to do is model the oscillation of the periods independently
-	// (and then later the gains)
-	// What we want is a delta function that varies in sigma and skew
-	// sigma and skew should covary, so that positive skew is associated with greater variance
-	// and negative skew with tighter distribution, to give us the hysteresis we want
-	// (i.e., on the downward trend it's more consistent but takes longer)
-
-	// Or maybe period should be stable, and phase resetting is the major intervention?
-	// Or period oscillates smoothly, PLUS phase resetting
-

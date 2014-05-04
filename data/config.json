@@ -1,0 +1,35 @@
+{
+	"beatRadius": 21,
+	
+	"shader": "frag0",
+
+	"oscillators": [
+		{
+			"stream":				"stream0",
+			"period":				1000,
+			"phase":				0.,
+			"gain":					1.2,
+			"balance":				[ 1.5, 1., 1. ],
+			"periodRC_hysteresis":	1.,
+			"gainRC_hysteresis":	1.
+		},
+		{
+			"stream":				"stream1",
+			"period":				1000,
+			"phase":				0.,
+			"gain":					1.2,
+			"balance":				[ 1.5, 1., 1. ],
+			"periodRC_hysteresis":	1.,
+			"gainRC_hysteresis":	1.
+		},
+		{
+			"stream":				"stream2",
+			"period":				1000,
+			"phase":				0.,
+			"gain":					1.2,
+			"balance":				[ 1.5, 1., 1. ],
+			"periodRC_hysteresis":	1.,
+			"gainRC_hysteresis":	1.
+		},
+	]
+}
