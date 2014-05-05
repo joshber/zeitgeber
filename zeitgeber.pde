@@ -13,6 +13,17 @@ import processing.video.*;
 // That way, with ease in / ease out, you could have a single oscillator model
 // that worked both as a pulse and a sine
 // D.h., when beat diamter == period, it's a sine
+//
+// Plus, FIXME, should balance be normed to gain?
+// Right now it's a multiplier, i.e. balance (3,1,1) means effectively red gain is tripled
+//
+// PLUS, Must decide if period and gain are calibrated to ambient zeitgeber readings
+// at startup ... and if so, if there's a way to recalibrate them, i.e., by storing
+// original "intrinsic" period and gain ... AND, if so, if the intrinsics can also shift
+// over time
+// Underlying practical question: If the environment gets quieter than it was originally,
+// will the period and gain get lower, or is the configured period/gain a floor?
+
 
 // Two kinds of zeitgeber, ambient and event (pulse -- i.e., sudden sensor event)
 
@@ -76,17 +87,20 @@ void setup() {
 void draw() {
 	background( color(0.,0.,0.) );
 
-	// Once a beat, check to see if any oscillators are on beat
-	if ( millis() % beat == 0 ) {
+	// Every 12 frames, stochastically ...
+	if ( theRNG.nextDouble() > .875 ) {
+		// Check to see if any oscillators are on the beat
 		for ( int i = 0; i < nOscillators; ++i ) {
-			double onBeat = oscillators[i].onBeat();
-			if ( onBeat > 0 ) {
+			double beatPhase = oscillators[i].beatPhase();
+			if ( beatPhase > 0 ) {
 				// TODO See if the other oscillators want to entrain to this one
 			}
 		}
+		// TODO --
+		// - Perturb period, phase, gain, threshold, and beat diameter with noise ?
+		// - Enqueue zeitgeber in the ØMQ pipe
+		// - Handle enqueued zeitgeber
 	}
-
-	// TODO: Handle sensor events
 
 	// Update shader uniforms with texture frame data and oscillator params
 	for ( int i = 0; i < nOscillators; ++i ) {
@@ -118,6 +132,7 @@ void keyPressed() {
 
 void reloadConfig() {
 	// TODO: Clean up from previous iteration to minimize memory leaks?
+
 	loadConfig();
 }
 
@@ -125,6 +140,9 @@ void loadConfig() {
 	JSONObject config = loadJSONObject( "config.json" );
 
 	frameRate( config.getFloat( "fps" ) );
+
+	// TODO --
+	// Parameterize beat radius per-oscillator
 
 	halfbeat = config.getInt( "beatRadius" );
 	beat = halfbeat * 2 - 1;
@@ -246,8 +264,8 @@ class Oscillator {
 		sh.set( "balance" + id, balance );
 	}
 
-	double onBeat() {
-		// Returns in interval [0,1] -- 0 off-beat, 1 at center of beat
+	// Beat phase in [0,1] -- 0 off-beat, 1 at center of beat
+	double beatPhase() {
 		return clamp( float( halfbeat - abs( millis() % ( period + beat ) - phase ) ), 0., float(halfbeat) )
 				/ float(halfbeat);
 			// period + beat to handle edge-of-period half-beat problem

@@ -12,6 +12,8 @@ precision mediump int;
 #define PROCESSING_COLOR_SHADER
 //#define PROCESSING_TEXTURE_SHADER
 
+const float PI = 3.14159265359;
+
 uniform vec2 resolution;
 
 uniform float halfbeat; // in milliseconds
@@ -45,10 +47,23 @@ uniform vec3 balance0; // RGB for beat expression
 uniform vec3 balance1;
 uniform vec3 balance2;
 
-float onBeat( float period, float phase ) {
-	// Returns in interval [0,1] -- 0 off-beat, 1 at center of beat
+// TODO
+// halfbeat0 1 2
+// threshold0 1 2
+
+// Beat phase in [0,1] -- 0 off-beat, 1 at center of beat
+float beatPhase( float period, float phase ) {
 	return clamp( halfbeat - abs( mod( time, period + beat ) - phase ), 0., halfbeat ) / halfbeat;
 		// + beat to handle edge-of-period half-beat problem
+}
+
+// Easing to simulate Fourier modeling of beat shape
+// - Start with beat phase in [0,1]
+// - Map it to [ sin(-π/2), sin(π/2) ]
+// - Map that to [ 1., gain ]
+float easing( float phase, float gain ) {
+	float pulse = .5 + .5 * sin( PI * ( phase - .5 ) );
+	return pulse * ( gain - 1. ) + 1.;
 }
 
 void main() {
@@ -72,30 +87,32 @@ void main() {
 
 	// Inspired by http://glsl.heroku.com/e#15220.0
 
-	float onBeat0 = onBeat( period0, phase0 );
-	float onBeat1 = onBeat( period1, phase1 );
-	float onBeat2 = onBeat( period2, phase2 );
+	float beatPhase0 = beatPhase( period0, phase0 );
+	float beatPhase1 = beatPhase( period1, phase1 );
+	float beatPhase2 = beatPhase( period2, phase2 );
 
 	// TODO --
-	// Ease in / ease out depending on how close to center of beat
-	// to simulate (at lower cost) Fourier modeling of beat shape
-	// Use a sinusoidal
-	// -- NB, the WHOLE WAVE has to fit within the beat, from trough to trough
+	// Add a flare, drawing in the color values from neighboring texels
+	// Look at http://glsl.heroku.com/e#15220.0 --
+	// Maybe use an exponential distance decay from current position
 
-	if ( onBeat0 > 0. ) {
-		c0.rgb = ( c0.rgb - threshold ) * gain0 + threshold;
+	// TODO --
+	// turn repeated contrast lines into a fn
+
+	if ( beatPhase0 > 0. ) {
+		c0.rgb = ( c0.rgb - threshold ) * easing( beatPhase0, gain0 ) + threshold;
 		c0.r *= balance0.r;
 		c0.g *= balance0.g;
 		c0.b *= balance0.b;
 	}
-	if ( onBeat1 > 0. ) {
-		c1.rgb = ( c1.rgb - threshold ) * gain1 + threshold;
+	if ( beatPhase1 > 0. ) {
+		c1.rgb = ( c1.rgb - threshold ) * easing( beatPhase1, gain1 ) + threshold;
 		c1.r *= balance1.r;
 		c1.g *= balance1.g;
 		c1.b *= balance1.b;
 	}
-	if ( onBeat2 > 0. ) {
-		c2.rgb = ( c2.rgb - threshold ) * gain2 + threshold;
+	if ( beatPhase2 > 0. ) {
+		c2.rgb = ( c2.rgb - threshold ) * easing( beatPhase2, gain2 ) + threshold;
 		c2.r *= balance2.r;
 		c2.g *= balance2.g;
 		c2.b *= balance2.b;

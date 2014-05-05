@@ -1,10 +1,10 @@
 {
 	"fps": 60.,
+
+	"shader": "frag0",
 	
 	"beatRadius": 121.,
 	"gainThreshold": .5,
-
-	"shader": "frag0",
 
 	"oscillators": [
 		{
@@ -18,7 +18,7 @@
 		},
 		{
 			"stream":				"stream1",
-			"period":				1000,
+			"period":				1500,
 			"phase":				0.,
 			"gain":					2.2,
 			"balance":				[ 3., 1., 1. ],
@@ -27,7 +27,7 @@
 		},
 		{
 			"stream":				"stream2",
-			"period":				1000,
+			"period":				1700,
 			"phase":				0.,
 			"gain":					2.2,
 			"balance":				[ 3., 1., 1. ],
