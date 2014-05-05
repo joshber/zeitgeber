@@ -3,8 +3,17 @@
 
 	"shader": "frag0",
 	
-	"beatRadius": 121.,
-	"gainThreshold": .5,
+	"default": {
+		"pulseRadius":			121,
+		"pulseSkew":			0.,
+		"period":				1000,
+		"phase":				0.,
+		"gain":					2.,
+		"balance":				[ 1., 1., 1. ],
+		"periodRC_hysteresis":	1.,
+		"gainRC_hysteresis":	1.,
+		"gainThreshold":		.5
+	},
 
 	"oscillators": [
 		{

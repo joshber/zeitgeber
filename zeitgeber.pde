@@ -8,14 +8,13 @@ import processing.video.*;
 // Clean up float / int thing in oscillator members
 
 // ****** TODO --
-// Parameterize beat diameter per oscillator
-// Along with gain threshold
+// Finish parameterizing pulse diameter, pulse skew, and gain threshold
+// changes in loadConfig, setShader, and in the shader itself
+//
 // That way, with ease in / ease out, you could have a single oscillator model
 // that worked both as a pulse and a sine
-// D.h., when beat diamter == period, it's a sine
+// D.h., when pulse diamter == period, it's a sine
 //
-// Plus, FIXME, should balance be normed to gain?
-// Right now it's a multiplier, i.e. balance (3,1,1) means effectively red gain is tripled
 //
 // PLUS, Must decide if period and gain are calibrated to ambient zeitgeber readings
 // at startup ... and if so, if there's a way to recalibrate them, i.e., by storing
@@ -23,6 +22,9 @@ import processing.video.*;
 // over time
 // Underlying practical question: If the environment gets quieter than it was originally,
 // will the period and gain get lower, or is the configured period/gain a floor?
+//
+// PLUS--
+// Go up to 7 streams
 
 
 // Two kinds of zeitgeber, ambient and event (pulse -- i.e., sudden sensor event)
@@ -37,9 +39,9 @@ import processing.video.*;
 
 // Ok, from the latest notes (19.4.14)--
 
-// millis() % 41 (pulsewidth) check to see if any oscillators are on the beat
+// millis() % 41 (pulsewidth) check to see if any oscillators are on the pulse
 // If so, they broadcast to others, which may entrain according to a phase response curve
-// Maximum phase response should be at antiphase from the on-beat oscillator (cf Czeisler and Gooley 2007)
+// Maximum phase response should be at antiphase from the on-pulse oscillator (cf Czeisler and Gooley 2007)
 // with phase delay (retardation) if it's before antiphase,
 // phase advance if it's after
 // -- This is not a total resetting, but a phase shift in the (nearer) *direction* of entrainment
@@ -58,14 +60,14 @@ import processing.video.*;
 
 Random theRNG; // For generating noise terms
 
-int halfbeat;
-int beat;
-	// In milliseconds. Actual half-beat is .5 less
-	// To see if an oscillator is on beat we test
-	// abs( millis() % ( period + beat ) - phase ) < halfbeat
-	// if == 0 we're exactly at the center of the beat
-	// otherwise need a half-beat radius around that exact center
-	// TODO: Would it be more intuitive to use <= halfbeat and have beat be 2*halfbeat + 1?
+int halfpulse;
+int pulse;
+// In milliseconds. Actual half-pulse is .5 less
+// To see if an oscillator is on pulse we test
+// abs( millis() % ( period + pulse ) - phase ) < halfpulse
+// if == 0 we're exactly at the center of the pulse
+// otherwise need a half-pulse radius around that exact center
+// TODO: Would it be more intuitive to use <= halfpulse and have pulse be 2*halfpulse + 1?
 
 PShader shadr;
 
@@ -75,140 +77,165 @@ int nOscillators;
 Oscillator[] oscillators;
 
 void setup() {
-	size( 720, 480, P2D );
-	colorMode( RGB, 1.0 );
-	noStroke();
+    size( 720, 480, P2D );
+    colorMode( RGB, 1.0 );
+    noStroke();
 
-	theRNG = new Random(/* long seed */);
+    theRNG = new Random(/* long seed */);
 
-	loadConfig();
+    loadConfig();
 }
 
 void draw() {
-	background( color(0.,0.,0.) );
+    background( color(0., 0., 0.) );
 
-	// Every 12 frames, stochastically ...
-	if ( theRNG.nextDouble() > .875 ) {
-		// Check to see if any oscillators are on the beat
-		for ( int i = 0; i < nOscillators; ++i ) {
-			double beatPhase = oscillators[i].beatPhase();
-			if ( beatPhase > 0 ) {
-				// TODO See if the other oscillators want to entrain to this one
-			}
-		}
-		// TODO --
-		// - Perturb period, phase, gain, threshold, and beat diameter with noise ?
-		// - Enqueue zeitgeber in the ØMQ pipe
-		// - Handle enqueued zeitgeber
-	}
+    // Every 12 frames, stochastically ...
+    if ( theRNG.nextDouble() > .875 ) {
+        // Check to see if any oscillators are on the pulse
+        for ( int i = 0; i < nOscillators; ++i ) {
+            double pulsePhase = oscillators[i].pulsePhase();
+            if ( pulsePhase > 0 ) {
+                // TODO See if the other oscillators want to entrain to this one
+            }
 
-	// Update shader uniforms with texture frame data and oscillator params
-	for ( int i = 0; i < nOscillators; ++i ) {
-		oscillators[i].setShader(shadr);
-	}
+            // TODO --
+            // - Perturb period, phase, gain, threshold, and pulse diameter with noise ?
+            // - Enqueue zeitgeber in the ØMQ pipe
+            // - Handle enqueued zeitgeber
+        }
+    }
 
-	shadr.set( "time", float( millis() ) );
-		// Passed as float bc GLSL < 3.0 can't do modulus on ints
+    // Update shader uniforms with texture frame data and oscillator params
+    for ( int i = 0; i < nOscillators; ++i ) {
+        oscillators[i].setShader(shadr);
+    }
 
-	shader(shadr);
-	fill( color(1.,1.,1.) ); // gives us the option of * vertColor in frag shader
-	rect( 0, 0, width, height );
+    shadr.set( "time", float( millis() ) );
+    // Passed as float bc GLSL < 3.0 can't do modulus on ints
+
+    shader(shadr);
+    fill( color(1., 1., 1.) ); // gives us the option of * vertColor in frag shader
+    rect( 0, 0, width, height );
 }
 
 // Movie events
 void movieEvent( Movie m ) {
-	m.read();
+    m.read();
 }
-void stop() {}
+void stop() { }
 
 //
 // Control and delegation
 
 void keyPressed() {
-	if ( key == 'r' || key == 'R' ) {
-		reloadConfig();
-	}
+    if ( key == 'r' || key == 'R' ) {
+        reloadConfig();
+    }
 }
 
 void reloadConfig() {
-	// TODO: Clean up from previous iteration to minimize memory leaks?
+    // TODO: Clean up from previous iteration to minimize memory leaks?
 
-	loadConfig();
+    loadConfig();
 }
 
 void loadConfig() {
-	JSONObject config = loadJSONObject( "config.json" );
+    JSONObject config = loadJSONObject( "config.json" );
 
-	frameRate( config.getFloat( "fps" ) );
+    frameRate( config.getFloat( "fps" ) );
 
-	// TODO --
-	// Parameterize beat radius per-oscillator
+    // Shader setup
+    shadr = loadShader( "shaders/" + config.getString( "shader" ) + ".glsl" );
+    shadr.set( "resolution", float(width), float(height) );
 
-	halfbeat = config.getInt( "beatRadius" );
-	beat = halfbeat * 2 - 1;
+    // Get default oscillator parameters
+    // TODO: Can we incorporate this into the loop below for greater regularity, less duplication?
+    JSONObject defaultOsc = config.getJSONObject( "default" );
+    int pulseRadiusDef = defaultOsc.getInt( "pulseRadius" );
+    float pulseSkewDef = defaultOsc.getFloat( "pulseSkew" );
+    int periodDef = defaultOsc.getInt( "period" );
+    float phaseDef = defaultOsc.getFloat( "phase" );
+    float gainDef = defaultOsc.getFloat( "gain" );
+    float gainThresholdDef = defaultOsc.getFloat( "gainThreshold" );
+    JSONArray blncDef = defaultOsc.getJSONArray( "balance" );
+    PVector balanceDef = new PVector( blncDef.getFloat( 0 ), blncDef.getFloat( 1 ), blncDef.getFloat( 2 ) );
+    float periodRCHDef = defaultOsc.getFloat( "periodRC_hysteresis" );
+    float gainRCHDef = defaultOsc.getFloat( "gainRC_hysteresis" );
 
-	gainThreshold = config.getFloat( "gainThreshold" );
-	
-	// Shader setup
-	shadr = loadShader( "shaders/" + config.getString( "shader" ) + ".glsl" );
-	shadr.set( "resolution", float(width), float(height) );
+    // TODO --
+    // Parameterize pulse radius and gain threshold per-oscillator
 
-	// At the moment, beat diameter is fixed -- But could be made mutable
-	// Passed as floats bc GLSL < 3.0 can't do mixed float-int arithmetic
-	shadr.set( "halfbeat", float(halfbeat) );
-	shadr.set( "beat", float(beat) );
+    halfpulse = pulseRadiusDef;
+    pulse = halfpulse * 2 - 1;
 
-	shadr.set( "threshold", gainThreshold );
+    // THIS WILL CHANGE SHORTLY
+    gainThreshold = gainThresholdDef;
 
-	//
-	// Configure the oscillators
+    // At the moment, pulse diameter is fixed -- But could be made mutable
+    // Passed as floats bc GLSL < 3.0 can't do mixed float-int arithmetic
+    shadr.set( "halfpulse", float(halfpulse) );
+    shadr.set( "pulse", float(pulse) );
 
-	JSONArray oscParams = config.getJSONArray( "oscillators" );
+    shadr.set( "threshold", gainThreshold );
 
-	nOscillators = oscParams.size();
-	oscillators = new Oscillator[nOscillators];
+    //
+    // Configure the oscillators
 
-	for ( int i = 0; i < nOscillators; ++i ) {
-		JSONObject osc = oscParams.getJSONObject( i );
+    JSONArray oscParams = config.getJSONArray( "oscillators" );
 
-		String streamHandle = osc.getString( "stream" );
-		int period = osc.getInt( "period" );
-		float phase = osc.getFloat( "phase" );
-		float gain = osc.getFloat( "gain" );
-		JSONArray blnc = osc.getJSONArray( "balance" );
-		float periodRCH = osc.getFloat( "periodRC_hysteresis" );
-		float gainRCH = osc.getFloat( "gainRC_hysteresis" );
+    nOscillators = oscParams.size();
+    oscillators = new Oscillator[nOscillators];
 
-		// FIXME Will this work? Or do we need to get them as JSONObjects first?
-		PVector balance = new PVector( blnc.getFloat( 0 ), blnc.getFloat( 1 ), blnc.getFloat( 2 ) );
+    for ( int i = 0; i < nOscillators; ++i ) {
+        JSONObject osc = oscParams.getJSONObject( i );
 
-		// Start the stream
-		Movie s = new Movie( this, "streams/" + streamHandle + ".mov" );
-		s.loop();
+        int pulseRadius = osc.hasKey( "pulseRadius" ) ? osc.getInt( "pulseRadius" ) : pulseRadiusDef;
+        float pulseSkew = osc.hasKey( "pulseSkew" ) ? osc.getFloat( "pulseSkew" ) : pulseSkewDef;
+        int period = osc.hasKey( "period" ) ? osc.getInt( "period" ) : periodDef;
+        float phase = osc.hasKey( "phase" ) ? osc.getFloat( "phase" ) : phaseDef;
+        float gain = osc.hasKey( "gain" ) ? osc.getFloat( "gain" ) : gainDef;
+        float gainThreshold = osc.hasKey( "gainThreshold" ) ? osc.getFloat( "gainThreshold" ) : gainThresholdDef;
+        PVector balance;
+        if ( osc.hasKey( "balance" ) ) {
+            JSONArray blnc = osc.getJSONArray( "balance" );
+            balance = new PVector( blnc.getFloat( 0 ), blnc.getFloat( 1 ), blnc.getFloat( 2 ) );
+        } else {
+            balance = balanceDef;
+        }
+        float periodRCH = osc.hasKey( "periodRC_hysteresis" ) ? osc.getFloat( "periodRC_hysteresis" ) : periodRCHDef;
+        float gainRCH = osc.hasKey( "gainRC_hysteresis" ) ? osc.getFloat( "gainRC_hysteresis" ) : gainRCHDef;
 
-		oscillators[i] = new Oscillator(
-									i,			// id
-									s,			// video stream
-									period,
-									phase,
-									gain,
-									balance,
-									periodRCH,
-									gainRCH
-								);
-	}
+        // Start the stream
+        String streamHandle = osc.getString( "stream" );
+        Movie s = new Movie( this, "streams/" + streamHandle + ".mov" );
+        s.loop();
+
+        oscillators[i] = new Oscillator(
+                                        i,          // id
+                                        s,          // video stream
+                                        pulseRadius, 
+                                        pulseSkew, 
+                                        period, 
+                                        phase, 
+                                        gain, 
+                                        gainThreshold, 
+                                        balance, 
+                                        periodRCH, 
+                                        gainRCH
+                              );
+    }
 }
 
 //
 // Oscillator-related
 
 double clamp( double x, double a, double b ) {
-	return x < a ? a : x > b ? b : x;
+    return x < a ? a : x > b ? b : x;
 }
 
 double gnoise( double mean, double sd ) {
-	// Clamping at 6 sigma should not introduce too much squaring ...
-	return mean + sd * clamp( theRNG.nextGaussian(), -6., 6. );
+    // Clamping at 6 sigma should not introduce too much squaring ...
+    return mean + sd * clamp( theRNG.nextGaussian(), -6., 6. );
 }
 
 // Perlin's Hermite 6x^5 - 15x^4 + 10x^3
@@ -220,54 +247,71 @@ double smootherstep( double a, double b, double x ) {
 }
 
 class Oscillator {
-	int id;
+    int id;
 
-	Movie s;
+    Movie s;
 
-	int period, phase; // in ms
+    int halfpulse, pulse; // widths in ms
+    float pulseSkew;
 
-	float gain; // 1-based, i.e., a coefficient
-	PVector balance; // RGB for beat expression
+    int period, phase; // in ms
 
-	// Response curve hysteresis terms: > 0 means latency on descending values
-	float periodRC_hysteresis, gainRC_hysteresis;
+    float gain; // 1-based, i.e., a coefficient
+    float gainThreshold;
+    PVector balance; // RGB for pulse expression
 
-	Oscillator() { }
+    // Response curve hysteresis terms: > 0 means latency on descending values
+    float periodRC_hysteresis, gainRC_hysteresis;
 
-	Oscillator(		int id_, Movie s_,
-					int period_, float phase_,
-					float gain_, PVector balance_,
-					float perRCH, float gainRCH
-				) {
-		id = id_;
-		s = s_;
+    Oscillator() { }
 
-		period = period_;
-		phase = int( phase_ * period ); // Map phase to period
-		
-		gain = gain_;
-		balance = balance_;
-		
-		periodRC_hysteresis = perRCH;
-		gainRC_hysteresis = gainRCH;
-	}
+    Oscillator( int id_, Movie s_, 
+                int pulseR_, float pulseS_, 
+                int period_, float phase_, 
+                float gain_, float gainT_, PVector balance_, 
+                float perRCH, float gainRCH
+            ) {
+        id = id_;
+        s = s_;
 
-	void setShader( PShader sh ) {
-		PImage frame = s;
-		sh.set( "stream" + id, frame );
+        halfpulse = pulseR_;
+        pulse = 2 * halfpulse - 1;
+        pulseSkew = pulseS_;
 
-		// Passed as floats bc GLSL < 3.0 can't do modulus on ints
-		sh.set( "period" + id, float(period) );
-		sh.set( "phase" + id, float(phase) );
+        period = period_;
+        phase = int( phase_ * period ); // Map phase to period
 
-		sh.set( "gain" + id, gain );
-		sh.set( "balance" + id, balance );
-	}
+        gain = gain_;
+        gainThreshold = gainT_;
+        balance = balance_;
 
-	// Beat phase in [0,1] -- 0 off-beat, 1 at center of beat
-	double beatPhase() {
-		return clamp( float( halfbeat - abs( millis() % ( period + beat ) - phase ) ), 0., float(halfbeat) )
-				/ float(halfbeat);
-			// period + beat to handle edge-of-period half-beat problem
-	}
+        periodRC_hysteresis = perRCH;
+        gainRC_hysteresis = gainRCH;
+    }
+
+    void setShader( PShader sh ) {
+        PImage frame = s;
+        sh.set( "stream" + id, frame );
+
+        //
+        // Ints passed as floats bc GLSL < 3.0 can't do modulus on ints
+
+        //sh.set( "halfpulse" + id, float(halfpulse) );
+        //sh.set( "pulse" + id, float(pulse) );
+        //sh.set( "skew" + id, pulseSkew );
+
+        sh.set( "period" + id, float(period) );
+        sh.set( "phase" + id, float(phase) );
+
+        sh.set( "gain" + id, gain );
+        //sh.set( "threshold" + id, gainThreshold );
+        sh.set( "balance" + id, balance );
+    }
+
+    // pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
+    double pulsePhase() {
+        return clamp( float( halfpulse - abs( millis() % ( period + pulse ) - phase ) ), 0., float(halfpulse) )
+                / float(halfpulse);
+            // period + pulse to handle edge-of-period half-pulse problem
+    }
 }

@@ -16,8 +16,8 @@ const float PI = 3.14159265359;
 
 uniform vec2 resolution;
 
-uniform float halfbeat; // in milliseconds
-uniform float beat;
+uniform float halfpulse; // in milliseconds
+uniform float pulse;
 
 uniform float time; // milliseconds since the start of the draw() loop
 uniform float threshold; // pivot for calculating gain expression, e.g. contrast
@@ -26,6 +26,8 @@ uniform float threshold; // pivot for calculating gain expression, e.g. contrast
 // - Processing shader API does not support array binding
 // - GLSL ES does not support looping over arrays (in GLSL < 4.0 array indices are const)
 //   http://stackoverflow.com/questions/12030711/glsl-array-of-textures-of-differing-size/
+
+// TODO: Add halfpulse, pulse, skew and threshold for all of these
 
 uniform sampler2D stream0;
 uniform sampler2D stream1;
@@ -43,27 +45,34 @@ uniform float gain0; // 1-based, i.e. a coefficient
 uniform float gain1;
 uniform float gain2;
 
-uniform vec3 balance0; // RGB for beat expression
+uniform vec3 balance0; // RGB for pulse expression
 uniform vec3 balance1;
 uniform vec3 balance2;
 
 // TODO
-// halfbeat0 1 2
+// halfpulse0 1 2
 // threshold0 1 2
 
-// Beat phase in [0,1] -- 0 off-beat, 1 at center of beat
-float beatPhase( float period, float phase ) {
-	return clamp( halfbeat - abs( mod( time, period + beat ) - phase ), 0., halfbeat ) / halfbeat;
-		// + beat to handle edge-of-period half-beat problem
+// pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
+float pulsePhase( float period, float phase ) {
+	return clamp( halfpulse - abs( mod( time, period + pulse ) - phase ), 0., halfpulse ) / halfpulse;
+		// + pulse to handle edge-of-period half-pulse problem
 }
 
-// Easing to simulate Fourier modeling of beat shape
-// - Start with beat phase in [0,1]
+// Easing to simulate Fourier modeling of pulse shape
+// - Start with pulse phase in [0,1]
 // - Map it to [ sin(-π/2), sin(π/2) ]
 // - Map that to [ 1., gain ]
 float easing( float phase, float gain ) {
 	float pulse = .5 + .5 * sin( PI * ( phase - .5 ) );
 	return pulse * ( gain - 1. ) + 1.;
+}
+
+// Right now, pulse expression is just an RGB-weighted contrast enhancement,
+// eased according to where in the time course of the pulse we are (pulsePhase)
+// TODO -- Add a flare!
+vec3 pulse( vec3 c, float pulsePhase, float gain, float threshold, vec3 balance ) {
+	return balance.rgb * ( ( c.rgb - threshold ) * easing( pulsePhase, gain ) + threshold );
 }
 
 void main() {
@@ -82,14 +91,14 @@ void main() {
 	vec4 c2 = texture2D( stream2, pos );
 
 	//
-	// For each stream, do something special if its oscillator is on-beat
+	// For each stream, do something special if its oscillator is on-pulse
 	// Right now the something special is just heightened contrast
 
 	// Inspired by http://glsl.heroku.com/e#15220.0
 
-	float beatPhase0 = beatPhase( period0, phase0 );
-	float beatPhase1 = beatPhase( period1, phase1 );
-	float beatPhase2 = beatPhase( period2, phase2 );
+	float pulsePhase0 = pulsePhase( period0, phase0 );
+	float pulsePhase1 = pulsePhase( period1, phase1 );
+	float pulsePhase2 = pulsePhase( period2, phase2 );
 
 	// TODO --
 	// Add a flare, drawing in the color values from neighboring texels
@@ -97,25 +106,18 @@ void main() {
 	// Maybe use an exponential distance decay from current position
 
 	// TODO --
-	// turn repeated contrast lines into a fn
+	// Make pulsePhase ± so we can add some asymmetry to the easing -- sharper attack, longer decay etc
+	// Maybe have it vary [0,2], with >1 postpeak ...
+	// or use a vec2 with sign represented separately
 
-	if ( beatPhase0 > 0. ) {
-		c0.rgb = ( c0.rgb - threshold ) * easing( beatPhase0, gain0 ) + threshold;
-		c0.r *= balance0.r;
-		c0.g *= balance0.g;
-		c0.b *= balance0.b;
+	if ( pulsePhase0 > 0. ) {
+		c0.rgb = pulse( c0.rgb, pulsePhase0, gain0, threshold, balance0 );
 	}
-	if ( beatPhase1 > 0. ) {
-		c1.rgb = ( c1.rgb - threshold ) * easing( beatPhase1, gain1 ) + threshold;
-		c1.r *= balance1.r;
-		c1.g *= balance1.g;
-		c1.b *= balance1.b;
+	if ( pulsePhase1 > 0. ) {
+		c1.rgb = pulse( c1.rgb, pulsePhase1, gain1, threshold, balance1 );
 	}
-	if ( beatPhase2 > 0. ) {
-		c2.rgb = ( c2.rgb - threshold ) * easing( beatPhase2, gain2 ) + threshold;
-		c2.r *= balance2.r;
-		c2.g *= balance2.g;
-		c2.b *= balance2.b;
+	if ( pulsePhase2 > 0. ) {
+		c2.rgb = pulse( c2.rgb, pulsePhase2, gain2, threshold, balance2 );
 	}
 
 	// TODO: Rethink
