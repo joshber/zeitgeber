@@ -4,6 +4,8 @@
 	"shader": "frag0",
 	
 	"default": {
+		"streamPath":			"Mai 2014",
+
 		"pulseRadius":			121,
 		"pulseSkew":			0.,
 		"period":				1000,
@@ -17,7 +19,7 @@
 
 	"oscillators": [
 		{
-			"stream":				"stream0",
+			"stream":				"stream 1",
 			"period":				1000,
 			"phase":				0.,
 			"gain":					2.2,
@@ -26,7 +28,7 @@
 			"gainRC_hysteresis":	1.
 		},
 		{
-			"stream":				"stream1",
+			"stream":				"stream 2",
 			"period":				1500,
 			"phase":				0.,
 			"gain":					2.2,
@@ -35,7 +37,7 @@
 			"gainRC_hysteresis":	1.
 		},
 		{
-			"stream":				"stream2",
+			"stream":				"stream 3",
 			"period":				1700,
 			"phase":				0.,
 			"gain":					2.2,

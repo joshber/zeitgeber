@@ -162,13 +162,17 @@ void loadConfig() {
     float periodRCHDef = defaultOsc.getFloat( "periodRC_hysteresis" );
     float gainRCHDef = defaultOsc.getFloat( "gainRC_hysteresis" );
 
+    String streamPath = defaultOsc.getString( "streamPath" );
+    if ( ! streamPath.equals( "" ) && streamPath.charAt( streamPath.length() - 1 ) != '/' )
+        streamPath += "/";
+
+
     // TODO --
     // Parameterize pulse radius and gain threshold per-oscillator
-
+    // THIS WILL CHANGE SHORTLY
+    //
     halfpulse = pulseRadiusDef;
     pulse = halfpulse * 2 - 1;
-
-    // THIS WILL CHANGE SHORTLY
     gainThreshold = gainThresholdDef;
 
     // At the moment, pulse diameter is fixed -- But could be made mutable
@@ -207,7 +211,7 @@ void loadConfig() {
 
         // Start the stream
         String streamHandle = osc.getString( "stream" );
-        Movie s = new Movie( this, "streams/" + streamHandle + ".mov" );
+        Movie s = new Movie( this, "streams/" + streamPath + streamHandle + ".mov" );
         s.loop();
 
         oscillators[i] = new Oscillator(
