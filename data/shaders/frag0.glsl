@@ -52,6 +52,8 @@ uniform vec3 balance2;
 // TODO
 // halfpulse0 1 2
 // threshold0 1 2
+// skew0 1 2
+// flare0 1 2 (vec3)
 
 // pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
 float pulsePhase( float period, float phase ) {
@@ -61,7 +63,7 @@ float pulsePhase( float period, float phase ) {
 
 // Easing to simulate Fourier modeling of pulse shape
 // - Start with pulse phase in [0,1]
-// - Map it to [ sin(-π/2), sin(π/2) ]
+// - Map it to [ sin(-π/2), sin(π/2) ], map that back to [0,1]
 // - Map that to [ 1., gain ]
 float easing( float phase, float gain ) {
 	float pulse = .5 + .5 * sin( PI * ( phase - .5 ) );
@@ -73,6 +75,7 @@ float easing( float phase, float gain ) {
 // TODO -- Add a flare!
 vec3 pulse( vec3 c, float pulsePhase, float gain, float threshold, vec3 balance ) {
 	return balance.rgb * ( ( c.rgb - threshold ) * easing( pulsePhase, gain ) + threshold );
+		// Achtung, color balance here is a MULTIPLIER, not an apportioner
 }
 
 void main() {

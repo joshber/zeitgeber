@@ -9,11 +9,15 @@ import processing.video.*;
 
 // ****** TODO --
 // Finish parameterizing pulse diameter, pulse skew, and gain threshold
+// and add flare (x,y,n samples)
 // changes in loadConfig, setShader, and in the shader itself
 //
 // That way, with ease in / ease out, you could have a single oscillator model
 // that worked both as a pulse and a sine
 // D.h., when pulse diamter == period, it's a sine
+//
+// + Add framerate configurable per-stream?
+//
 //
 //
 // PLUS, Must decide if period and gain are calibrated to ambient zeitgeber readings
@@ -23,8 +27,13 @@ import processing.video.*;
 // Underlying practical question: If the environment gets quieter than it was originally,
 // will the period and gain get lower, or is the configured period/gain a floor?
 //
+// PLUS: Gaussian flare (x,y,n samples) strength = .5 * 1/(d^2)
+// or a ring flare ? lens flare?
+//
+// THEN: Add entrainment etc
+//
 // PLUS--
-// Go up to 7 streams
+// Go up to 8 streams
 
 
 // Two kinds of zeitgeber, ambient and event (pulse -- i.e., sudden sensor event)
@@ -35,6 +44,8 @@ import processing.video.*;
 
 // Phase is the only thing that responds to pulse zeitgeber
 // Again, a phase response curve -- logistic-type Hermite + Gaussian noise term
+//
+// Cross-frequency coupling ... something to try for another project
 
 
 // Ok, from the latest notes (19.4.14)--
@@ -62,12 +73,6 @@ Random theRNG; // For generating noise terms
 
 int halfpulse;
 int pulse;
-// In milliseconds. Actual half-pulse is .5 less
-// To see if an oscillator is on pulse we test
-// abs( millis() % ( period + pulse ) - phase ) < halfpulse
-// if == 0 we're exactly at the center of the pulse
-// otherwise need a half-pulse radius around that exact center
-// TODO: Would it be more intuitive to use <= halfpulse and have pulse be 2*halfpulse + 1?
 
 PShader shadr;
 
@@ -77,13 +82,16 @@ int nOscillators;
 Oscillator[] oscillators;
 
 void setup() {
-    size( 720, 480, P2D );
+    //size( 720, 480, P2D );
+    size( displayWidth, displayHeight, P2D );
+
     colorMode( RGB, 1.0 );
+    fill( color( 1., 1., 1. ) ); // In case we * vertColor in the fragment shader
     noStroke();
 
-    theRNG = new Random(/* long seed */);
+    theRNG = new Random( /* long seed */ );
 
-    loadConfig();
+    loadConfig( true /* load streams */ );
 }
 
 void draw() {
@@ -111,21 +119,30 @@ void draw() {
     }
 
     shadr.set( "time", float( millis() ) );
-    // Passed as float bc GLSL < 3.0 can't do modulus on ints
+        // Passed as float bc GLSL < 3.0 can't do modulus on ints
 
     shader(shadr);
-    fill( color(1., 1., 1.) ); // gives us the option of * vertColor in frag shader
     rect( 0, 0, width, height );
 }
 
-// Movie events
+//
+// Stream events
+
 void movieEvent( Movie m ) {
     m.read();
 }
+
 void stop() { }
 
 //
 // Control and delegation
+
+// Fullscreen: For caveats and workarounds
+// see http://wiki.processing.org/w/Window_Size_and_Full_Screen
+//
+boolean sketchFullScreen() {
+    return false;
+}
 
 void keyPressed() {
     if ( key == 'r' || key == 'R' ) {
@@ -136,10 +153,10 @@ void keyPressed() {
 void reloadConfig() {
     // TODO: Clean up from previous iteration to minimize memory leaks?
 
-    loadConfig();
+    loadConfig( false /* don't load streams */ );
 }
 
-void loadConfig() {
+void loadConfig( boolean loadStreams ) {
     JSONObject config = loadJSONObject( "config.json" );
 
     frameRate( config.getFloat( "fps" ) );
@@ -162,10 +179,14 @@ void loadConfig() {
     float periodRCHDef = defaultOsc.getFloat( "periodRC_hysteresis" );
     float gainRCHDef = defaultOsc.getFloat( "gainRC_hysteresis" );
 
-    String streamPath = defaultOsc.getString( "streamPath" );
-    if ( ! streamPath.equals( "" ) && streamPath.charAt( streamPath.length() - 1 ) != '/' )
-        streamPath += "/";
+    String streamPath = "";
+    if ( loadStreams ) {
+        streamPath = defaultOsc.getString( "streamPath" );
 
+        // Ensure trailing /
+        if ( ! streamPath.equals( "" ) && streamPath.charAt( streamPath.length() - 1 ) != '/' )
+            streamPath += "/";
+    }
 
     // TODO --
     // Parameterize pulse radius and gain threshold per-oscillator
@@ -179,7 +200,6 @@ void loadConfig() {
     // Passed as floats bc GLSL < 3.0 can't do mixed float-int arithmetic
     shadr.set( "halfpulse", float(halfpulse) );
     shadr.set( "pulse", float(pulse) );
-
     shadr.set( "threshold", gainThreshold );
 
     //
@@ -188,7 +208,8 @@ void loadConfig() {
     JSONArray oscParams = config.getJSONArray( "oscillators" );
 
     nOscillators = oscParams.size();
-    oscillators = new Oscillator[nOscillators];
+    if ( loadStreams )
+        oscillators = new Oscillator[nOscillators];
 
     for ( int i = 0; i < nOscillators; ++i ) {
         JSONObject osc = oscParams.getJSONObject( i );
@@ -209,24 +230,44 @@ void loadConfig() {
         float periodRCH = osc.hasKey( "periodRC_hysteresis" ) ? osc.getFloat( "periodRC_hysteresis" ) : periodRCHDef;
         float gainRCH = osc.hasKey( "gainRC_hysteresis" ) ? osc.getFloat( "gainRC_hysteresis" ) : gainRCHDef;
 
-        // Start the stream
-        String streamHandle = osc.getString( "stream" );
-        Movie s = new Movie( this, "streams/" + streamPath + streamHandle + ".mov" );
-        s.loop();
+        Movie s = null;
+        if ( loadStreams ) {
+            // Start the stream
+            String streamHandle = osc.getString( "stream" );
+            s = new Movie( this, "streams/" + streamPath + streamHandle + ".mov" );
+            s.loop();
+        }
 
-        oscillators[i] = new Oscillator(
-                                        i,          // id
-                                        s,          // video stream
-                                        pulseRadius, 
-                                        pulseSkew, 
-                                        period, 
-                                        phase, 
-                                        gain, 
-                                        gainThreshold, 
-                                        balance, 
-                                        periodRCH, 
-                                        gainRCH
-                              );
+        // On first call, create new oscillators
+        if ( loadStreams ) {
+            oscillators[i] = new Oscillator(
+                                            i,          // id
+                                            s,          // video stream
+                                            pulseRadius, 
+                                            pulseSkew, 
+                                            period, 
+                                            phase, 
+                                            gain, 
+                                            gainThreshold, 
+                                            balance, 
+                                            periodRCH, 
+                                            gainRCH
+                                );
+        } else {
+            // A little crude, but I'd rather not muck around with move semantics
+            // (i.e., moving Movies to new oscillators)
+            oscillators[i].reconfig(
+                                    pulseRadius, 
+                                    pulseSkew, 
+                                    period, 
+                                    phase, 
+                                    gain, 
+                                    gainThreshold, 
+                                    balance, 
+                                    periodRCH, 
+                                    gainRCH
+                            );
+        }
     }
 }
 
@@ -255,14 +296,24 @@ class Oscillator {
 
     Movie s;
 
-    int halfpulse, pulse; // widths in ms
+    int halfpulse, pulse;
+        // Widths in milliseconds
+        // Actual half-pulse is .5 less, i.e. pulse == 2 * halfpulse - 1
+        // To see if an oscillator is on pulse we test
+        // abs( millis() % ( period + pulse ) - phase ) < halfpulse
+        // if == 0 we're exactly at the center of the pulse
+        // otherwise need a half-pulse radius around that exact center
+        // We do it this way so that if halfpulse == 0 it means no pulse
+
     float pulseSkew;
+        // [-1,1] for pulse shape
+        // Positive skew means steeper onset to peak dx/dt==0, shallower offset 
 
     int period, phase; // in ms
 
     float gain; // 1-based, i.e., a coefficient
-    float gainThreshold;
-    PVector balance; // RGB for pulse expression
+    float gainThreshold; // e.g., pivot for contrast pulse expression--see shader
+    PVector balance; // RGB balance for pulse expression
 
     // Response curve hysteresis terms: > 0 means latency on descending values
     float periodRC_hysteresis, gainRC_hysteresis;
@@ -278,6 +329,15 @@ class Oscillator {
         id = id_;
         s = s_;
 
+        reconfig( pulseR_, pulseS_, period_, phase_, gain_, gainT_, balance_, perRCH, gainRCH );
+    }
+
+    void reconfig (
+                int pulseR_, float pulseS_, 
+                int period_, float phase_, 
+                float gain_, float gainT_, PVector balance_, 
+                float perRCH, float gainRCH
+            ) {        
         halfpulse = pulseR_;
         pulse = 2 * halfpulse - 1;
         pulseSkew = pulseS_;
