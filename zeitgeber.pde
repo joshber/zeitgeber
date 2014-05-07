@@ -82,8 +82,8 @@ int nOscillators;
 Oscillator[] oscillators;
 
 void setup() {
-    //size( 720, 480, P2D );
-    size( displayWidth, displayHeight, P2D );
+    size( 1280, 720, P2D );
+    //size( displayWidth, displayHeight, P2D );
 
     colorMode( RGB, 1.0 );
     fill( color( 1., 1., 1. ) ); // In case we * vertColor in the fragment shader

@@ -1,3 +1,14 @@
+// TODO Develop the wiggle into something controlled by the controller
+// Set the envelope in config.json: µ and sd for (x,y) gain, freq, centerline, decay
+// and for duration
+// Send duration to shader as an expiration time,
+// so the distortion can be eased in and out as we're doing for the contrast pulse
+// (and maybe add a skew)
+// Then start thinking about how distortion could be triggered by visitor activity ...
+// maybe certain activity increases the frequency, gain, etc
+// Maybe the distortion pulses should come in waves ... ?
+
+
 // Zeitgeber v0.0001
 
 #ifdef GL_ES
@@ -16,11 +27,11 @@ const float PI = 3.14159265359;
 
 uniform vec2 resolution;
 
-uniform float halfpulse; // in milliseconds
+uniform float halfpulse; // in milliseconds -- FIXME SOON PER-OSC
 uniform float pulse;
 
 uniform float time; // milliseconds since the start of the draw() loop
-uniform float threshold; // pivot for calculating gain expression, e.g. contrast
+uniform float threshold; // pivot for calculating gain expression, e.g. contrast -- FIXME THIS WILL SOON BE PER-OSC
 
 // 5/2014: This may look like the Bad Way of doing things but--
 // - Processing shader API does not support array binding
@@ -53,7 +64,7 @@ uniform vec3 balance2;
 // halfpulse0 1 2
 // threshold0 1 2
 // skew0 1 2
-// flare0 1 2 (vec3)
+// flare0 1 2 (vec3 x, y, n samples)
 
 // pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
 float pulsePhase( float period, float phase ) {
@@ -67,7 +78,7 @@ float pulsePhase( float period, float phase ) {
 // - Map that to [ 1., gain ]
 float easing( float phase, float gain ) {
 	float pulse = .5 + .5 * sin( PI * ( phase - .5 ) );
-	return pulse * ( gain - 1. ) + 1.;
+	return 1. + pulse * ( gain - 1. );
 }
 
 // Right now, pulse expression is just an RGB-weighted contrast enhancement,
@@ -76,6 +87,23 @@ float easing( float phase, float gain ) {
 vec3 pulse( vec3 c, float pulsePhase, float gain, float threshold, vec3 balance ) {
 	return balance.rgb * ( ( c.rgb - threshold ) * easing( pulsePhase, gain ) + threshold );
 		// Achtung, color balance here is a MULTIPLIER, not an apportioner
+}
+
+// FIXME: Sinusoidal distortion -- DEVELOP
+// FIXME: Could this distortion be on a per-stream basis?
+//
+vec2 distort( vec2 p ) {
+	// TODO: ADD A HORIZONTAL COMPONENT -- Will we need a separate ± component?
+
+	float gainY = .01;
+	float freqY = 1000. / 10.;
+	float centerlineY = .5;
+	float decayY = 2.;
+	p.s +=	gainY * sin( p.t * time / freqY )
+			* pow( p.s < centerlineY ? p.s / centerlineY : ( 1. - p.s ) / ( 1. - centerlineY ), decayY );
+				// 1. at the centerline, decays on either side from there
+
+	return p;
 }
 
 void main() {
@@ -87,6 +115,9 @@ void main() {
 
 	// 1-texel offset for convolution filtering
 	vec2 off = vec2( 1. / resolution.s, 1. / resolution.t );
+
+	// FIXME TEST OF WIGGLE DISTORTION;
+	pos.st = distort( pos );
 
 	// Sample texture data for current fragment
 	vec4 c0 = texture2D( stream0, pos );
@@ -132,12 +163,3 @@ void main() {
 
 	gl_FragColor = vec4( blend.rgb, 1. ) ; //* vertColor;
 }
-
-
-
-	// TODO -- Motion blur! Use offsets at multiple steps from the current fragment for bigger blur
-	// http://lodev.org/cgtutor/filtering.html
-	// Modularize with arrays -- radius-2 texel matrix == [25], rad-2 convolution matrix, pass those in w offset, get out convolved color
-	// Or for efficiency just [5] for the row, if we're doing transverse motion blur
-	// -- and the gain is represented by blur radius and duration ...
-
