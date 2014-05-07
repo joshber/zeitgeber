@@ -1,12 +1,24 @@
 // TODO Develop the wiggle into something controlled by the controller
-// Set the envelope in config.json: µ and sd for (x,y) gain, freq, centerline, decay
-// and for duration
+// Set the envelope in config.json: µ and sd for (x,y) gain, freq (1000. / f Hz -- pass in f), centerline, decay
+// and for duration (Poisson/Gamma? Log-normal?), and how often they occur (uniform -- so, exponential)
 // Send duration to shader as an expiration time,
 // so the distortion can be eased in and out as we're doing for the contrast pulse
 // (and maybe add a skew)
 // Then start thinking about how distortion could be triggered by visitor activity ...
 // maybe certain activity increases the frequency, gain, etc
 // Maybe the distortion pulses should come in waves ... ?
+
+// ALSO easy to limit the distortion to a specific stream -- simply alter the fragment position just for that stream
+// So these envelopes shoudl be a on a per-oscillator basis ... or maybe a separate set of oscillators?
+// Ideally, would oscillator:stream be *:* ?
+// Then we'd have two types of oscillators, contrast and distortion
+// Each stream could take one of each ...
+// Might be too complex to implement just yet
+
+// BUT, I don't think the distortion should be oscillatory
+// It should be stochastic, defined by Gaussian envelopes as sketched above
+// And possibly event-triggered too
+// The controller can specify which streams a particular distortion pulse applies to
 
 
 // Zeitgeber v0.0001
@@ -90,15 +102,14 @@ vec3 pulse( vec3 c, float pulsePhase, float gain, float threshold, vec3 balance 
 }
 
 // FIXME: Sinusoidal distortion -- DEVELOP
-// FIXME: Could this distortion be on a per-stream basis?
 //
 vec2 distort( vec2 p ) {
 	// TODO: ADD A HORIZONTAL COMPONENT -- Will we need a separate ± component?
 
 	float gainY = .01;
-	float freqY = 1000. / 10.;
+	float freqY = 1000. / 100.;
 	float centerlineY = .5;
-	float decayY = 2.;
+	float decayY = 1.;
 	p.s +=	gainY * sin( p.t * time / freqY )
 			* pow( p.s < centerlineY ? p.s / centerlineY : ( 1. - p.s ) / ( 1. - centerlineY ), decayY );
 				// 1. at the centerline, decays on either side from there
@@ -116,11 +127,11 @@ void main() {
 	// 1-texel offset for convolution filtering
 	vec2 off = vec2( 1. / resolution.s, 1. / resolution.t );
 
-	// FIXME TEST OF WIGGLE DISTORTION;
-	pos.st = distort( pos );
-
 	// Sample texture data for current fragment
 	vec4 c0 = texture2D( stream0, pos );
+
+	pos.st = distort( pos ); // FIXME TEST OF DISTORTION
+
 	vec4 c1 = texture2D( stream1, pos );
 	vec4 c2 = texture2D( stream2, pos );
 

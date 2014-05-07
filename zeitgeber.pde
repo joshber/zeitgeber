@@ -1,5 +1,6 @@
 // Zeitgeber v0.0001
 
+import java.lang.Math;
 import java.util.Random;
 
 import processing.video.*;
@@ -278,9 +279,16 @@ double clamp( double x, double a, double b ) {
     return x < a ? a : x > b ? b : x;
 }
 
-double gnoise( double mean, double sd ) {
+double gaussian( double mean, double sd ) {
     // Clamping at 6 sigma should not introduce too much squaring ...
     return mean + sd * clamp( theRNG.nextGaussian(), -6., 6. );
+}
+
+// When we need a zero-anchored distribution
+// http://en.wikipedia.org/wiki/Log-normal_distribution
+//
+double lognormal( double mean, double sd ) {
+    return Math.exp( gaussian( mean, sd ) );
 }
 
 // Perlin's Hermite 6x^5 - 15x^4 + 10x^3
@@ -363,6 +371,8 @@ class Oscillator {
         //sh.set( "halfpulse" + id, float(halfpulse) );
         //sh.set( "pulse" + id, float(pulse) );
         //sh.set( "skew" + id, pulseSkew );
+
+        // FIXME TODO: Add modest random noise to the gain, phase, and period?
 
         sh.set( "period" + id, float(period) );
         sh.set( "phase" + id, float(phase) );
