@@ -3,7 +3,7 @@
 // and for duration (Poisson/Gamma? Log-normal?), and how often they occur (uniform -- so, exponential)
 // Send duration to shader as an expiration time,
 // so the distortion can be eased in and out as we're doing for the contrast pulse
-// (and maybe add a skew)
+//
 // Then start thinking about how distortion could be triggered by visitor activity ...
 // maybe certain activity increases the frequency, gain, etc
 // Maybe the distortion pulses should come in waves ... ?

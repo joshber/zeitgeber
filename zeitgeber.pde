@@ -108,7 +108,6 @@ void draw() {
             }
 
             // TODO --
-            // - Perturb period, phase, gain, threshold, and pulse diameter with noise ?
             // - Enqueue zeitgeber in the ØMQ pipe
             // - Handle enqueued zeitgeber
         }
@@ -293,10 +292,10 @@ double lognormal( double mean, double sd ) {
 
 // Perlin's Hermite 6x^5 - 15x^4 + 10x^3
 double smootherstep( double a, double b, double x ) {
-    // Scale, and clamp x to 0..1 range
+    // Scale and clamp x to [0,1]
     x = clamp( (x - a) / (b - a), 0., 1. );
     // Evaluate polynomial
-    return x*x*x * (x * ( x*6 - 15 ) + 10);
+    return x * x * x * ( x * ( x * 6. - 15. ) + 10. );
 }
 
 class Oscillator {
@@ -372,17 +371,20 @@ class Oscillator {
         //sh.set( "pulse" + id, float(pulse) );
         //sh.set( "skew" + id, pulseSkew );
 
-        // FIXME TODO: Add modest random noise to the gain, phase, and period?
+        sh.set( "period" + id, (float)( float(period) + (float)( gaussian( 0., .005 * float(period) ) ) ) );
+            // period gets modest noise -- 2 s.d. == 1 percent deviation
 
-        sh.set( "period" + id, float(period) );
         sh.set( "phase" + id, float(phase) );
 
-        sh.set( "gain" + id, gain );
+        sh.set( "gain" + id, (float)( gain + (float)( gaussian( 0., .05 * gain ) ) ) );
+            // gain gets modest noise -- 2 s.d. == 10 percent deviation
+
         //sh.set( "threshold" + id, gainThreshold );
         sh.set( "balance" + id, balance );
     }
 
     // pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
+    // TODO: Encode whether we're in onset or offset
     double pulsePhase() {
         return clamp( float( halfpulse - abs( millis() % ( period + pulse ) - phase ) ), 0., float(halfpulse) )
                 / float(halfpulse);
