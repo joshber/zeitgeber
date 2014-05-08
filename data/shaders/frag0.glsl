@@ -1,8 +1,7 @@
 // TODO Develop the wiggle into something controlled by the controller
-// Set the envelope in config.json: µ and sd for (x,y) gain, freq (1000. / f Hz -- pass in f), centerline, decay
-// and for duration (Poisson/Gamma? Log-normal?), and how often they occur (uniform -- so, exponential)
-// Send duration to shader as an expiration time,
-// so the distortion can be eased in and out as we're doing for the contrast pulse
+// Set the envelope in config.json: µ and sd for gain, freq (1000. / f Hz -- pass in f), centerline, decay,
+// heading ( mean = π/2, s.d. = π/16 )
+// and for duration (Log-normal), and how often they occur (uniform -- so, exponential)
 //
 // Then start thinking about how distortion could be triggered by visitor activity ...
 // maybe certain activity increases the frequency, gain, etc
@@ -38,23 +37,27 @@ precision mediump int;
 const float PI = 3.14159265359;
 
 uniform vec2 resolution;
-
-uniform float halfpulse; // in milliseconds -- FIXME SOON PER-OSC
-uniform float pulse;
-
 uniform float time; // milliseconds since the start of the draw() loop
-uniform float threshold; // pivot for calculating gain expression, e.g. contrast -- FIXME THIS WILL SOON BE PER-OSC
 
 // 5/2014: This may look like the Bad Way of doing things but--
 // - Processing shader API does not support array binding
 // - GLSL ES does not support looping over arrays (in GLSL < 4.0 array indices are const)
 //   http://stackoverflow.com/questions/12030711/glsl-array-of-textures-of-differing-size/
 
-// TODO: Add halfpulse, pulse, skew and threshold for all of these
+//
+// Oscillator uniforms
 
 uniform sampler2D stream0;
 uniform sampler2D stream1;
 uniform sampler2D stream2;
+
+uniform float halfpulse0;
+uniform float halfpulse1;
+uniform float halfpulse2;
+
+uniform float skew0;
+uniform float skew1;
+uniform float skew2;
 
 uniform float period0; // in ms
 uniform float period1;
@@ -68,18 +71,36 @@ uniform float gain0; // 1-based, i.e. a coefficient
 uniform float gain1;
 uniform float gain2;
 
+uniform float threshold0; // pivot for calculating gain expression, e.g. contrast
+uniform float threshold1;
+uniform float threshold2;
+
+/*uniform vec3 flare0;
+uniform vec3 flare1;
+uniform vec3 flare2;
+*/
+
 uniform vec3 balance0; // RGB for pulse expression
 uniform vec3 balance1;
 uniform vec3 balance2;
 
-// TODO
-// halfpulse0 1 2
-// threshold0 1 2
-// skew0 1 2
-// flare0 1 2 (vec3 x, y, n samples)
+//
+// Distortion uniforms
+/*
+uniform float dGain;
+uniform float dFreq;
+uniform float dCenterline;
+uniform float dHeading;
+uniform float dDecay;
+uniform float dStart;
+uniform float dEnd;
+*/
 
 // pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
-float pulsePhase( float period, float phase ) {
+float pulsePhase( float period, float phase, float halfpulse ) {
+	float pulse = 2. * halfpulse - 1.;
+		// Achtung, make sure this tracks the halfpulse-pulse formula in the controller
+
 	return clamp( halfpulse - abs( mod( time, period + pulse ) - phase ), 0., halfpulse ) / halfpulse;
 		// + pulse to handle edge-of-period half-pulse problem
 }
@@ -104,12 +125,27 @@ vec3 pulse( vec3 c, float pulsePhase, float gain, float threshold, vec3 balance 
 // FIXME: Sinusoidal distortion -- DEVELOP
 //
 vec2 distort( vec2 p ) {
-	// TODO: ADD A HORIZONTAL COMPONENT -- Will we need a separate ± component?
+	// if ( time > dEnd ) return p;
 
+	//vec2 dp;
+
+/*	float halfpulse = .5 * ( dEnd - dStart );
+	float phase = 1. - ( abs( halfpulse - ( time - dStart ) ) / halfpulse );
+		// [0,1], 0 at edge of distortion pulse, 1 at peak
+
+	float easing = .5 + .5 * sin( PI * ( phase - .5 ) );
+
+
+	float freq = 1000. / dFreq;
+	dp.s = sin( dHeading ) * ...
+	dp.t = cos( dHeading ) * ...
+	return p + dp * easing;
+*/
 	float gainY = .01;
-	float freqY = 1000. / 100.;
+	float freqY = 1000. / 10.;
 	float centerlineY = .5;
-	float decayY = 1.;
+	float decayY = 2.;
+	
 	p.s +=	gainY * sin( p.t * time / freqY )
 			* pow( p.s < centerlineY ? p.s / centerlineY : ( 1. - p.s ) / ( 1. - centerlineY ), decayY );
 				// 1. at the centerline, decays on either side from there
@@ -127,11 +163,11 @@ void main() {
 	// 1-texel offset for convolution filtering
 	vec2 off = vec2( 1. / resolution.s, 1. / resolution.t );
 
+	// Add distortion as appropriate
+	pos.st = distort( pos );
+
 	// Sample texture data for current fragment
 	vec4 c0 = texture2D( stream0, pos );
-
-	pos.st = distort( pos ); // FIXME TEST OF DISTORTION
-
 	vec4 c1 = texture2D( stream1, pos );
 	vec4 c2 = texture2D( stream2, pos );
 
@@ -141,9 +177,9 @@ void main() {
 
 	// Inspired by http://glsl.heroku.com/e#15220.0
 
-	float pulsePhase0 = pulsePhase( period0, phase0 );
-	float pulsePhase1 = pulsePhase( period1, phase1 );
-	float pulsePhase2 = pulsePhase( period2, phase2 );
+	float pulsePhase0 = pulsePhase( period0, phase0, halfpulse0 );
+	float pulsePhase1 = pulsePhase( period1, phase1, halfpulse1 );
+	float pulsePhase2 = pulsePhase( period2, phase2, halfpulse2 );
 
 	// TODO --
 	// Add a flare, drawing in the color values from neighboring texels
@@ -156,13 +192,13 @@ void main() {
 	// or use a vec2 with sign represented separately
 
 	if ( pulsePhase0 > 0. ) {
-		c0.rgb = pulse( c0.rgb, pulsePhase0, gain0, threshold, balance0 );
+		c0.rgb = pulse( c0.rgb, pulsePhase0, gain0, threshold0, balance0 );
 	}
 	if ( pulsePhase1 > 0. ) {
-		c1.rgb = pulse( c1.rgb, pulsePhase1, gain1, threshold, balance1 );
+		c1.rgb = pulse( c1.rgb, pulsePhase1, gain1, threshold1, balance1 );
 	}
 	if ( pulsePhase2 > 0. ) {
-		c2.rgb = pulse( c2.rgb, pulsePhase2, gain2, threshold, balance2 );
+		c2.rgb = pulse( c2.rgb, pulsePhase2, gain2, threshold2, balance2 );
 	}
 
 	// TODO: Rethink

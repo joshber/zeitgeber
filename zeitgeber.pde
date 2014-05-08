@@ -8,17 +8,13 @@ import processing.video.*;
 // Longer-term TODO --
 // Clean up float / int thing in oscillator members
 
-// ****** TODO --
-// Finish parameterizing pulse diameter, pulse skew, and gain threshold
-// and add flare (x,y,n samples)
-// changes in loadConfig, setShader, and in the shader itself
+// TOP TODO
+// Add pulse skew
+// Add flare: (s.d. in texels, decay, # samples) -- NOT directional
+// Finish distortion -- NOT balanced by stream, uniform across them
+// Add timelines to visualize the oscillators (at foot of viewport)
 //
-// That way, with ease in / ease out, you could have a single oscillator model
-// that worked both as a pulse and a sine
-// D.h., when pulse diamter == period, it's a sine
-//
-// + Add framerate configurable per-stream?
-//
+// THEN: It's time to get to entrainment
 //
 //
 // PLUS, Must decide if period and gain are calibrated to ambient zeitgeber readings
@@ -72,12 +68,10 @@ import processing.video.*;
 
 Random theRNG; // For generating noise terms
 
-int halfpulse;
-int pulse;
+//int halfpulse; // WILL GO AWAY
+//int pulse;
 
 PShader shadr;
-
-float gainThreshold;
 
 int nOscillators;
 Oscillator[] oscillators;
@@ -187,20 +181,6 @@ void loadConfig( boolean loadStreams ) {
         if ( ! streamPath.equals( "" ) && streamPath.charAt( streamPath.length() - 1 ) != '/' )
             streamPath += "/";
     }
-
-    // TODO --
-    // Parameterize pulse radius and gain threshold per-oscillator
-    // THIS WILL CHANGE SHORTLY
-    //
-    halfpulse = pulseRadiusDef;
-    pulse = halfpulse * 2 - 1;
-    gainThreshold = gainThresholdDef;
-
-    // At the moment, pulse diameter is fixed -- But could be made mutable
-    // Passed as floats bc GLSL < 3.0 can't do mixed float-int arithmetic
-    shadr.set( "halfpulse", float(halfpulse) );
-    shadr.set( "pulse", float(pulse) );
-    shadr.set( "threshold", gainThreshold );
 
     //
     // Configure the oscillators
@@ -367,19 +347,16 @@ class Oscillator {
         //
         // Ints passed as floats bc GLSL < 3.0 can't do modulus on ints
 
-        //sh.set( "halfpulse" + id, float(halfpulse) );
-        //sh.set( "pulse" + id, float(pulse) );
-        //sh.set( "skew" + id, pulseSkew );
+        sh.set( "halfpulse" + id, float(halfpulse) );
+        sh.set( "skew" + id, pulseSkew );
 
-        sh.set( "period" + id, (float)( float(period) + (float)( gaussian( 0., .005 * float(period) ) ) ) );
-            // period gets modest noise -- 2 s.d. == 1 percent deviation
+        sh.set( "period" + id, float(period) );
 
         sh.set( "phase" + id, float(phase) );
 
-        sh.set( "gain" + id, (float)( gain + (float)( gaussian( 0., .05 * gain ) ) ) );
-            // gain gets modest noise -- 2 s.d. == 10 percent deviation
+        sh.set( "gain" + id, gain ); 
 
-        //sh.set( "threshold" + id, gainThreshold );
+        sh.set( "threshold" + id, gainThreshold );
         sh.set( "balance" + id, balance );
     }
 
