@@ -107,6 +107,8 @@ void draw() {
         }
     }
 
+    // FIXME: HANDLE DISTORTION
+
     // Update shader uniforms with texture frame data and oscillator params
     for ( int i = 0; i < nOscillators; ++i ) {
         oscillators[i].setShader(shadr);
@@ -367,4 +369,11 @@ class Oscillator {
                 / float(halfpulse);
             // period + pulse to handle edge-of-period half-pulse problem
     }
+}
+
+//
+// Distortion-related
+
+class Distortion {
+
 }
