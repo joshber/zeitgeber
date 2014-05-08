@@ -20,10 +20,10 @@
 		"pulseRadius":			2000,
 		"pulseSkew":			0.,
 		"period":				8000,
-		"phase":				0.,
+		"phase":				.5,
 		"gain":					3.,
 		"gainThreshold":		.5,
-		"balance":				[ 3., 1., 1. ],
+		"balance":				[ 1., 3., 3. ],
 
 		"periodRC_hysteresis":	1.,
 		"gainRC_hysteresis":	1.,
@@ -32,6 +32,9 @@
 	"oscillators": [
 		{
 			"stream":				"stream 1",
+			"period":				1000,
+			"pulseRadius":			50,
+			"balance":				[ 3., 1., 1. ]
 		},
 		{
 			"stream":				"stream 2",

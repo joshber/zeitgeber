@@ -9,6 +9,8 @@ import processing.video.*;
 // Clean up float / int thing in oscillator members
 
 // TOP TODO
+// PULSEPHASE IS NOT WORKING !!!!! It's not generating a full sine wave FIX FIX FIX
+//
 // Add pulse skew
 // Add flare: (s.d. in texels, decay, # samples) -- NOT directional
 // Finish distortion -- NOT balanced by stream, uniform across them
@@ -66,10 +68,9 @@ import processing.video.*;
 // All response curves also have a Gaussian error term
 
 
-Random theRNG; // For generating noise terms
+boolean showVisualizer;
 
-//int halfpulse; // WILL GO AWAY
-//int pulse;
+Random theRNG; // For generating noise terms
 
 PShader shadr;
 
@@ -81,8 +82,10 @@ void setup() {
     //size( displayWidth, displayHeight, P2D );
 
     colorMode( RGB, 1.0 );
-    fill( color( 1., 1., 1. ) ); // In case we * vertColor in the fragment shader
+    fill( color( 1., 1., 1., 1. ) ); // In case we * vertColor in the fragment shader
     noStroke();
+
+    showVisualizer = false;
 
     theRNG = new Random( /* long seed */ );
 
@@ -90,13 +93,13 @@ void setup() {
 }
 
 void draw() {
-    background( color(0., 0., 0.) );
+    background( color( 0., 0., 0., 1. ) );
 
     // Every 12 frames, stochastically ...
     if ( theRNG.nextDouble() > .875 ) {
         // Check to see if any oscillators are on the pulse
         for ( int i = 0; i < nOscillators; ++i ) {
-            double pulsePhase = oscillators[i].pulsePhase();
+            double pulsePhase = oscillators[i].pulsePhase( millis() );
             if ( pulsePhase > 0 ) {
                 // TODO See if the other oscillators want to entrain to this one
             }
@@ -119,6 +122,61 @@ void draw() {
 
     shader(shadr);
     rect( 0, 0, width, height );
+
+    visualizer();
+}
+
+//
+// Overlays
+
+void visualizer() {
+    if ( ! showVisualizer ) return;
+
+    resetShader();
+    pushStyle();
+
+    // Scrim to enhance overlay visibility
+    fill( color( 1., 1., 1., .75 ) );
+    rect( 0, height - 170, width, height );
+
+    stroke( 1 );
+
+    translate( 0, height - 170 );
+
+    for ( int i = 0; i < nOscillators; ++i ) {
+        translate( 0, 50 );
+
+        PVector balance = oscillators[i].balance;
+        float denom = balance.x + balance.y + balance.z;
+        color c = color( oscillators[i].balance.x / denom, oscillators[i].balance.y / denom, oscillators[i].balance.z / denom );
+        stroke( c );
+        fill( c );
+
+        textAlign( RIGHT );
+        textSize( 10 );
+        text( oscillators[i].name, 90, 0 );
+
+        line( 100, 0, width - 100, 0 );
+
+        int period = oscillators[i].period;
+
+        for ( int j = 0; j < 5; ++j ) {
+            float phase = (float)( oscillators[i].pulsePhase( millis() - j * 100 ) );
+
+            float scaledPhase = PI * ( abs( phase ) - .5 );
+
+            float pulse = -40. * ( .5 + .5 * sin( scaledPhase ) );//- skew * sin( /*-sign( phase ) */ scaledPhase ) ) 
+
+            ellipse( map( ( millis() - j * 100 ) % period, 0, period, 101, width - 100 ), pulse, 3, 3 );
+        }
+        float phase = (float)( oscillators[i].pulsePhase( millis() ) );
+        float scaledPhase = PI * ( abs( phase ) - .5 );
+        float pulse = .5 + .5 * sin( scaledPhase ); //- skew * sin( /*-sign( phase ) */ scaledPhase ) ) 
+
+        println( oscillators[i].name + " easing " + pulse );
+    }
+
+    popStyle();
 }
 
 //
@@ -143,6 +201,9 @@ boolean sketchFullScreen() {
 void keyPressed() {
     if ( key == 'r' || key == 'R' ) {
         reloadConfig();
+    }
+    if ( key == 'v' || key == 'V' ) {
+        showVisualizer = ! showVisualizer;
     }
 }
 
@@ -213,9 +274,10 @@ void loadConfig( boolean loadStreams ) {
         float gainRCH = osc.hasKey( "gainRC_hysteresis" ) ? osc.getFloat( "gainRC_hysteresis" ) : gainRCHDef;
 
         Movie s = null;
+        String streamHandle = "";
         if ( loadStreams ) {
             // Start the stream
-            String streamHandle = osc.getString( "stream" );
+            streamHandle = osc.getString( "stream" );
             s = new Movie( this, "streams/" + streamPath + streamHandle + ".mov" );
             s.loop();
         }
@@ -223,8 +285,9 @@ void loadConfig( boolean loadStreams ) {
         // On first call, create new oscillators
         if ( loadStreams ) {
             oscillators[i] = new Oscillator(
-                                            i,          // id
-                                            s,          // video stream
+                                            i,              // id
+                                            streamHandle,   // name
+                                            s,              // video stream
                                             pulseRadius, 
                                             pulseSkew, 
                                             period, 
@@ -282,6 +345,7 @@ double smootherstep( double a, double b, double x ) {
 
 class Oscillator {
     int id;
+    String name;
 
     Movie s;
 
@@ -309,13 +373,14 @@ class Oscillator {
 
     Oscillator() { }
 
-    Oscillator( int id_, Movie s_, 
+    Oscillator( int id_, String name_, Movie s_, 
                 int pulseR_, float pulseS_, 
                 int period_, float phase_, 
                 float gain_, float gainT_, PVector balance_, 
                 float perRCH, float gainRCH
             ) {
         id = id_;
+        name = name_;
         s = s_;
 
         reconfig( pulseR_, pulseS_, period_, phase_, gain_, gainT_, balance_, perRCH, gainRCH );
@@ -364,10 +429,17 @@ class Oscillator {
 
     // pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
     // TODO: Encode whether we're in onset or offset
-    double pulsePhase() {
-        return clamp( float( halfpulse - abs( millis() % ( period + pulse ) - phase ) ), 0., float(halfpulse) )
-                / float(halfpulse);
-            // period + pulse to handle edge-of-period half-pulse problem
+    // FIXME THIS MAY NOT BE WORKING. ADDED 1. - AND OUTER abs
+    double pulsePhase( int t ) {
+        int distanceFromPulseCenter = t % period - phase; // period + pulse??
+
+        // Ok, so it appears the problem *was* the phase-at-edge-of-period problem
+        
+        double ph = clamp( float( halfpulse - abs( distanceFromPulseCenter ) ), 0., float( halfpulse ) )
+                        / float( halfpulse );
+
+        if (id == 0) println(ph);
+        return ph;
     }
 }
 

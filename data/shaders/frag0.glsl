@@ -1,3 +1,6 @@
+// FIXME PULSE PHASE AND EASING IS NOT CORRECT
+
+
 // TODO Develop the wiggle into something controlled by the controller
 // Set the envelope in config.json: µ and sd for gain, freq (1000. / f Hz -- pass in f), centerline, decay,
 // heading ( mean = π/2, s.d. = π/16 )
@@ -105,12 +108,18 @@ float pulsePhase( float period, float phase, float halfpulse ) {
 	float pulse = 2. * halfpulse - 1.;
 		// Achtung, make sure this tracks the halfpulse-pulse formula in the controller
 
-	float distanceFromPulseCenter = mod( time, period + pulse ) - phase;
-		// + pulse to handle edge-of-period half-pulse problem
+	float distanceFromPulseCenter = mod( time, period ) - phase;
+		// + pulse to handle edge-of-period half-pulse problem ??
 
 	// [ 0 -.000.. .. 1.0 .999.. .. 0 ]
-	return	clamp( halfpulse - abs( distanceFromPulseCenter ), 0., halfpulse ) / halfpulse
-			* sign( distanceFromPulseCenter );
+	// FIXME THIS IS WRONG NEEDS FIXING ... ADDED OUTER ABS AND OUTER 1. -
+	//return	( clamp( halfpulse - abs( distanceFromPulseCenter ), 0., halfpulse ) / halfpulse );
+
+	// If the distance from the pulse center is < halfpulse, then we're in the pulse
+	// Otherwise it doesn't matter where we are so clamp to 0
+	//
+	return	clamp( halfpulse - abs( distanceFromPulseCenter ), 0., halfpulse ) / halfpulse;
+//			* sign( distanceFromPulseCenter );
 }
 
 // Easing to simulate Fourier modeling of pulse shape
@@ -132,8 +141,10 @@ float pulsePhase( float period, float phase, float halfpulse ) {
 float easing( float phase, float skew, float gain ) {
 	float scaledPhase = PI * ( abs( phase ) - .5 );
 
-	float pulse = .5 + .5 * sin( scaledPhase - skew * sin( -sign( phase ) * scaledPhase ) );
+	float pulse = .5 + .5 * sin( scaledPhase );//- skew * sin( /*-sign( phase ) */ scaledPhase ) );
 
+	// FIXME THIS IS NOT WORKING RIGHT -- SORT OF INVERTED
+	
 	return 1. + pulse * ( gain - 1. );
 }
 
