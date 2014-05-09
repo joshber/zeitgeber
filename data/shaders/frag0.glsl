@@ -74,15 +74,6 @@ uniform float gain0; // 1-based, i.e. a coefficient
 uniform float gain1;
 uniform float gain2;
 
-uniform float threshold0; // pivot for calculating gain expression, e.g. contrast
-uniform float threshold1;
-uniform float threshold2;
-
-/*uniform vec3 flare0;
-uniform vec3 flare1;
-uniform vec3 flare2;
-*/
-
 uniform vec3 balance0; // RGB for pulse expression
 uniform vec3 balance1;
 uniform vec3 balance2;
@@ -99,27 +90,12 @@ uniform float dStart;
 uniform float dEnd;
 */
 
-// pulse phase in [ 0 -.000.. .. 1.0 .999.. .. 0 ]
-// -- 0 off-pulse, 1 at center, negative on upslope, positive on downslope
-//
-// TODO Would it be easier simply to put it in [ 0, 2 ] ?
-//
+// pulse phase in [0,1] -- 0 off-pulse, 1 at center
 float pulsePhase( float period, float phase, float halfpulse ) {
-	float pulse = 2. * halfpulse - 1.;
-		// Achtung, make sure this tracks the halfpulse-pulse formula in the controller
+	float relphase = mod( time, period );
+	float distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase) );
 
-	float distanceFromPulseCenter = mod( time, period ) - phase;
-		// + pulse to handle edge-of-period half-pulse problem ??
-
-	// [ 0 -.000.. .. 1.0 .999.. .. 0 ]
-	// FIXME THIS IS WRONG NEEDS FIXING ... ADDED OUTER ABS AND OUTER 1. -
-	//return	( clamp( halfpulse - abs( distanceFromPulseCenter ), 0., halfpulse ) / halfpulse );
-
-	// If the distance from the pulse center is < halfpulse, then we're in the pulse
-	// Otherwise it doesn't matter where we are so clamp to 0
-	//
-	return	clamp( halfpulse - abs( distanceFromPulseCenter ), 0., halfpulse ) / halfpulse;
-//			* sign( distanceFromPulseCenter );
+	return clamp( halfpulse - abs( distanceFromPulseCenter ), 0., halfpulse ) / halfpulse;
 }
 
 // Easing to simulate Fourier modeling of pulse shape
@@ -127,33 +103,19 @@ float pulsePhase( float period, float phase, float halfpulse ) {
 // - Map it to [ sin(-π/2), sin(π/2) ], map that back to [0,1]
 // - Map that to [ 1., gain ]
 //
-// FIXME: ADD SKEW ... SWITCH TO BEZIER EASING? STILL NEED A PHASE THAT COVERS THE WHOLE PULSE
-// No, we can do it with a sign. We need a phi that varies according to pulsePhase
-// so when skew < 0 π/2 = phi(pulsePhase, skew) < center of pulse
-// http://mathforum.org/library/drmath/view/67051.html
-//
-// Maybe sin( PI * ( abs( phase ) - .5 ) + sign( phase ) (FIXME something something skew) * sin( PI * ( abs( phase ) - .5 ) ) )
-// where negative sign( phase ) and positive skew will advance the peak
-// No, that's not what we need -- we need to negate the skew but put the phase sign inside the sine somehow
-// or maybe we need a version of pulse phase that runs [0,1] inside the sine?
-// or maybe it doesn't matter if pulsephase is unsigned?
-//
 float easing( float phase, float skew, float gain ) {
 	float scaledPhase = PI * ( abs( phase ) - .5 );
 
-	float pulse = .5 + .5 * sin( scaledPhase );//- skew * sin( /*-sign( phase ) */ scaledPhase ) );
+	float pulse = .5 + .5 * sin( scaledPhase );
 
-	// FIXME THIS IS NOT WORKING RIGHT -- SORT OF INVERTED
-	
 	return 1. + pulse * ( gain - 1. );
 }
 
-// Right now, pulse expression is just an RGB-weighted contrast enhancement,
+// Right now, pulse expression is just an RGB-weighted brightness enhancement,
 // eased according to where in the time course of the pulse we are (pulsePhase)
-// TODO -- Add a flare!
 //
-vec3 pulse( vec3 c, float pulsePhase, float skew, float gain, float threshold, vec3 balance ) {
-	return balance.rgb * ( ( c.rgb - threshold ) * easing( pulsePhase, skew, gain ) + threshold );
+vec3 pulse( vec3 c, float pulsePhase, float skew, float gain, vec3 balance ) {
+	return balance.rgb * c.rgb * easing( pulsePhase, skew, gain );
 		// Achtung, color balance here is a MULTIPLIER, not an apportioner
 }
 
@@ -228,13 +190,13 @@ void main() {
 	// or use a vec2 with sign represented separately
 
 	if ( pulsePhase0 > 0. ) {
-		c0.rgb = pulse( c0.rgb, pulsePhase0, skew0, gain0, threshold0, balance0 );
+		c0.rgb = pulse( c0.rgb, pulsePhase0, skew0, gain0, balance0 );
 	}
 	if ( pulsePhase1 > 0. ) {
-		c1.rgb = pulse( c1.rgb, pulsePhase1, skew1, gain1, threshold1, balance1 );
+		c1.rgb = pulse( c1.rgb, pulsePhase1, skew1, gain1, balance1 );
 	}
 	if ( pulsePhase2 > 0. ) {
-		c2.rgb = pulse( c2.rgb, pulsePhase2, skew2, gain2, threshold2, balance2 );
+		c2.rgb = pulse( c2.rgb, pulsePhase2, skew2, gain2, balance2 );
 	}
 
 	// TODO: Rethink

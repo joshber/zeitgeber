@@ -9,12 +9,9 @@ import processing.video.*;
 // Clean up float / int thing in oscillator members
 
 // TOP TODO
-// PULSEPHASE IS NOT WORKING !!!!! It's not generating a full sine wave FIX FIX FIX
+// Skew: We just need a monotonic pulse phase function, i.e. 0 .. 1 over the whole phase
 //
-// Add pulse skew
-// Add flare: (s.d. in texels, decay, # samples) -- NOT directional
 // Finish distortion -- NOT balanced by stream, uniform across them
-// Add timelines to visualize the oscillators (at foot of viewport)
 //
 // THEN: It's time to get to entrainment
 //
@@ -25,9 +22,6 @@ import processing.video.*;
 // over time
 // Underlying practical question: If the environment gets quieter than it was originally,
 // will the period and gain get lower, or is the configured period/gain a floor?
-//
-// PLUS: Gaussian flare (x,y,n samples) strength = .5 * 1/(d^2)
-// or a ring flare ? lens flare?
 //
 // THEN: Add entrainment etc
 //
@@ -135,16 +129,19 @@ void visualizer() {
     resetShader();
     pushStyle();
 
+    float oscH = 50.;
+    float visualizerH = oscH * nOscillators + 20.;
+
     // Scrim to enhance overlay visibility
     fill( color( 1., 1., 1., .75 ) );
-    rect( 0, height - 170, width, height );
+    rect( 0, height - visualizerH, width, height );
 
     stroke( 1 );
 
-    translate( 0, height - 170 );
+    translate( 0, height - visualizerH );
 
     for ( int i = 0; i < nOscillators; ++i ) {
-        translate( 0, 50 );
+        translate( 0, oscH );
 
         PVector balance = oscillators[i].balance;
         float denom = balance.x + balance.y + balance.z;
@@ -160,20 +157,22 @@ void visualizer() {
 
         int period = oscillators[i].period;
 
+        // Dot contour for the pulse
         for ( int j = 0; j < 5; ++j ) {
-            float phase = (float)( oscillators[i].pulsePhase( millis() - j * 100 ) );
+            c = color( oscillators[i].balance.x / denom, oscillators[i].balance.y / denom, oscillators[i].balance.z / denom,
+                        1. -  j * .2 );
+            stroke( c );
+            fill( c );
+
+            int spacingFactor = oscillators[i].halfpulse / 10;
+            float phase = (float)( oscillators[i].pulsePhase( millis() - j * spacingFactor ) );
 
             float scaledPhase = PI * ( abs( phase ) - .5 );
 
-            float pulse = -40. * ( .5 + .5 * sin( scaledPhase ) );//- skew * sin( /*-sign( phase ) */ scaledPhase ) ) 
+            float pulse = -(oscH - 10.) * ( .5 + .5 * sin( scaledPhase ) ); //- /*oscillators[i].pulseSkew */ max( 0, scaledPhase ) ) ); 
 
-            ellipse( map( ( millis() - j * 100 ) % period, 0, period, 101, width - 100 ), pulse, 3, 3 );
+            ellipse( map( ( millis() - j * spacingFactor ) % period, 0, period, 101, width - 100 ), pulse, 3, 3 );
         }
-        float phase = (float)( oscillators[i].pulsePhase( millis() ) );
-        float scaledPhase = PI * ( abs( phase ) - .5 );
-        float pulse = .5 + .5 * sin( scaledPhase ); //- skew * sin( /*-sign( phase ) */ scaledPhase ) ) 
-
-        println( oscillators[i].name + " easing " + pulse );
     }
 
     popStyle();
@@ -230,7 +229,6 @@ void loadConfig( boolean loadStreams ) {
     int periodDef = defaultOsc.getInt( "period" );
     float phaseDef = defaultOsc.getFloat( "phase" );
     float gainDef = defaultOsc.getFloat( "gain" );
-    float gainThresholdDef = defaultOsc.getFloat( "gainThreshold" );
     JSONArray blncDef = defaultOsc.getJSONArray( "balance" );
     PVector balanceDef = new PVector( blncDef.getFloat( 0 ), blncDef.getFloat( 1 ), blncDef.getFloat( 2 ) );
     float periodRCHDef = defaultOsc.getFloat( "periodRC_hysteresis" );
@@ -262,7 +260,6 @@ void loadConfig( boolean loadStreams ) {
         int period = osc.hasKey( "period" ) ? osc.getInt( "period" ) : periodDef;
         float phase = osc.hasKey( "phase" ) ? osc.getFloat( "phase" ) : phaseDef;
         float gain = osc.hasKey( "gain" ) ? osc.getFloat( "gain" ) : gainDef;
-        float gainThreshold = osc.hasKey( "gainThreshold" ) ? osc.getFloat( "gainThreshold" ) : gainThresholdDef;
         PVector balance;
         if ( osc.hasKey( "balance" ) ) {
             JSONArray blnc = osc.getJSONArray( "balance" );
@@ -292,8 +289,7 @@ void loadConfig( boolean loadStreams ) {
                                             pulseSkew, 
                                             period, 
                                             phase, 
-                                            gain, 
-                                            gainThreshold, 
+                                            gain,  
                                             balance, 
                                             periodRCH, 
                                             gainRCH
@@ -306,8 +302,7 @@ void loadConfig( boolean loadStreams ) {
                                     pulseSkew, 
                                     period, 
                                     phase, 
-                                    gain, 
-                                    gainThreshold, 
+                                    gain,
                                     balance, 
                                     periodRCH, 
                                     gainRCH
@@ -349,14 +344,7 @@ class Oscillator {
 
     Movie s;
 
-    int halfpulse, pulse;
-        // Widths in milliseconds
-        // Actual half-pulse is .5 less, i.e. pulse == 2 * halfpulse - 1
-        // To see if an oscillator is on pulse we test
-        // abs( millis() % ( period + pulse ) - phase ) < halfpulse
-        // if == 0 we're exactly at the center of the pulse
-        // otherwise need a half-pulse radius around that exact center
-        // We do it this way so that if halfpulse == 0 it means no pulse
+    int halfpulse; // radius in milliseconds
 
     float pulseSkew;
         // [-1,1] for pulse shape
@@ -365,7 +353,6 @@ class Oscillator {
     int period, phase; // in ms
 
     float gain; // 1-based, i.e., a coefficient
-    float gainThreshold; // e.g., pivot for contrast pulse expression--see shader
     PVector balance; // RGB balance for pulse expression
 
     // Response curve hysteresis terms: > 0 means latency on descending values
@@ -376,31 +363,29 @@ class Oscillator {
     Oscillator( int id_, String name_, Movie s_, 
                 int pulseR_, float pulseS_, 
                 int period_, float phase_, 
-                float gain_, float gainT_, PVector balance_, 
+                float gain_, PVector balance_, 
                 float perRCH, float gainRCH
             ) {
         id = id_;
         name = name_;
         s = s_;
 
-        reconfig( pulseR_, pulseS_, period_, phase_, gain_, gainT_, balance_, perRCH, gainRCH );
+        reconfig( pulseR_, pulseS_, period_, phase_, gain_, balance_, perRCH, gainRCH );
     }
 
     void reconfig (
                 int pulseR_, float pulseS_, 
                 int period_, float phase_, 
-                float gain_, float gainT_, PVector balance_, 
+                float gain_, PVector balance_, 
                 float perRCH, float gainRCH
             ) {        
         halfpulse = pulseR_;
-        pulse = 2 * halfpulse - 1;
         pulseSkew = pulseS_;
 
         period = period_;
         phase = int( phase_ * period ); // Map phase to period
 
         gain = gain_;
-        gainThreshold = gainT_;
         balance = balance_;
 
         periodRC_hysteresis = perRCH;
@@ -418,28 +403,22 @@ class Oscillator {
         sh.set( "skew" + id, pulseSkew );
 
         sh.set( "period" + id, float(period) );
-
         sh.set( "phase" + id, float(phase) );
 
         sh.set( "gain" + id, gain ); 
-
-        sh.set( "threshold" + id, gainThreshold );
         sh.set( "balance" + id, balance );
     }
 
     // pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
     // TODO: Encode whether we're in onset or offset
-    // FIXME THIS MAY NOT BE WORKING. ADDED 1. - AND OUTER abs
+    // TODO: Edge-of-period phase problem
+    //
     double pulsePhase( int t ) {
-        int distanceFromPulseCenter = t % period - phase; // period + pulse??
-
-        // Ok, so it appears the problem *was* the phase-at-edge-of-period problem
-        
-        double ph = clamp( float( halfpulse - abs( distanceFromPulseCenter ) ), 0., float( halfpulse ) )
+        int relphase = t % period;
+        int distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase ) );
+ 
+        return clamp( float( halfpulse - abs( distanceFromPulseCenter ) ), 0., float( halfpulse ) )
                         / float( halfpulse );
-
-        if (id == 0) println(ph);
-        return ph;
     }
 }
 
