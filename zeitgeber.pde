@@ -344,11 +344,9 @@ class Oscillator {
 
     Movie s;
 
-    int halfpulse; // radius in milliseconds
+    int halfpulse; // Radius in milliseconds
 
-    float pulseSkew;
-        // [-1,1] for pulse shape
-        // Positive skew means steeper onset to peak dx/dt==0, shallower offset 
+    float skew; // Positive skew means advanced peak
 
     int period, phase; // in ms
 
@@ -410,15 +408,23 @@ class Oscillator {
     }
 
     // pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
-    // TODO: Encode whether we're in onset or offset
-    // TODO: Edge-of-period phase problem
-    //
     double pulsePhase( int t ) {
         int relphase = t % period;
         int distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase ) );
  
-        return clamp( float( halfpulse - abs( distanceFromPulseCenter ) ), 0., float( halfpulse ) )
-                        / float( halfpulse );
+        return clamp( (float)( halfpulse - abs( distanceFromPulseCenter ) ), 0., (float)( halfpulse ) )
+                        / (float)( halfpulse );
+    }
+
+    // pulse phase in [0,1] -- 0 == onset, 1 == offset
+    // FIXME IS THIS CORRECT? WHIPPED IT OFF, NOT SURE
+    double skewPhase( int t ) {
+        double pulse = (float)( halfpulse * 2 - 1 ); // FIXME -1 OR WITHOUT -1 ?
+
+        int relphase = t % period;
+        int distanceFromPulseOnset = min( relphase - phase - halfpulse, phase - halfpulse + ( period - relphase ) );
+
+        return 1. - ( clamp( pulse - abs( distanceFromPulseOnset ), 0., pulse ) / pulse );
     }
 }
 
