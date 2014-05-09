@@ -33,14 +33,15 @@
 		{
 			"stream":				"stream 1",
 			"phase":				.5,
-			"period":				8000,
+			"period":				4000,
 			"halfpulse":			500,
-			"gain":					6.,
-			"skew":					2.,
+			"gain":					12.,
+			"skew":					-9.,
 			"balance":				[ 1., 1., 1. ]
 		},
 		{
 			"stream":				"stream 2",
+			"halfpulse":			500.,
 		},
 		{
 			"stream":				"stream 3",

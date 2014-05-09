@@ -9,7 +9,10 @@ import processing.video.*;
 // Clean up float / int thing in oscillator members
 
 // TOP TODO
-// Skew: We just need a monotonic pulse phase function, i.e. 0 .. 1 over the whole phase
+// Skew: Can we make it work?
+// Ok. So. We made it work, but it's not strong enough. Can't get more than a modest distortion before it turns into a multiflash
+//
+// So. NIX SKEW ?
 //
 // Finish distortion -- NOT balanced by stream, uniform across them
 //
@@ -152,13 +155,25 @@ void visualizer() {
 
         textAlign( RIGHT );
         textSize( 10 );
-        text( oscillators[i].name, 90, 0 );
+        text( oscillators[i].name, 90, 1 );
 
         c = color(  oscillators[i].balance.x / denom, oscillators[i].balance.y / denom,
                     oscillators[i].balance.z / denom, .5 );
         line( 100, 0, width - 100, 0 );
 
         int period = oscillators[i].period;
+
+        //
+        // Mark the pulse
+        // FIXME: DOES NOT WORK AT THE EDGE
+
+        float scaledHalfpulse = map( oscillators[i].halfpulse, 0, period, 0, width - 200 );
+        float scaledPhaseCenter = map( oscillators[i].phase, 0, period, 0, width - 200 );
+
+        line( 100 + scaledPhaseCenter - scaledHalfpulse, 1., 100 + scaledPhaseCenter + scaledHalfpulse, 1. );
+
+        stroke( color( 1., 1., 1., .75 ) );
+        line( 100 + scaledPhaseCenter - 1., 1., 100 + scaledPhaseCenter + 1., 1. );
 
         // Dot contour for the pulse
         for ( int j = 0; j < 5; ++j ) {
@@ -172,15 +187,36 @@ void visualizer() {
 
             float phase = (float)( oscillators[i].pulsePhase( t ) );
 
-            float scaledPhase = PI * ( abs( phase ) - .5 );
+            float scaledPhase = PI * ( phase - .5 );
 
-            float skew = oscillators[i].skew * sin( PI * oscillators[i].skewPhase( t ) );
-            float pulse = -(oscH - 15.) * ( .5 + .5 * sin( scaledPhase - skew ) );
+            // We want zero advance/delay at pulse onset, zero at pulse offset,
+            // maximal at pulse peak
+            // sin(2π · 0) == 0, sin(2π · 1) == 0, sin(2π · .5) == 0
+            // sin(π · 0) == 0, sin(π · 1) == 0, sin(π · .5) == 1
+            // But we also want to make sure the sine term is never less than 0
+            // -- NO, that's wrong. We need delay if we have advance. The delay should come after the midpoint
+
+            // Dimly I'm aware that what I'm doing wrong has something to do with the fact
+            // that ... ok, maybe I have no idea what I'm doing 
+            // What if we say: We want maximal advance at pulse peak, maximal delay at 
+            // sin(π/2) == 1
+            // The problem is, this technique assumes that there's an x-axis crossing at the midpoint
+            // But what we're doing is putting two sine waves together, so the midpoint is the peak
+            // So what if we pretended here that we want the advance/delay at the crossing
+            // But we did that -- π · skph -- didn't work
+
+            // NEW APPROACH -- POSITIVE SKEW == STEEPEN THE SINE WITH A MULTIPLIER < MIDPOINT, THEN SHALLOWEN
+            // SO skew must == 1 when there's no skew
+            float skph = oscillators[i].skewPhase( t );
+            float skew = oscillators[i].skew * sin( 2 * PI * skph );
+// FIXME phi needs to be a cubic, phi(0) == 0, phi(1) == 0, phi(<.5) > 0, phi(>.5) < 0
+// i.e., roots at 0, .5., 1
+            float pulse = -(oscH - 15.) * ( .5 + .5 * sin( scaledPhase + skew ) );
 
             ellipse( map( t % period, 0, period, 101, width - 100 ), pulse, 3, 3 );
 
-            if ( i == 0 && j == 0 ) println( "skew phase: " + oscillators[i].skewPhase( t ) );
-
+            if ( i == 0 && j == 0 )
+                println( "pulse phase: " + oscillators[i].pulsePhase( t ) + "   skew phase: " + oscillators[i].skewPhase( t ) );
         }
     }
 
@@ -426,54 +462,18 @@ class Oscillator {
     }
 
     // pulse phase in [ 0, 1 ] -- 0 == onset, 1 == offset
-    // FIXME IS THIS CORRECT? WHIPPED IT OFF, NOT SURE
     float skewPhase( int t ) {
         float pulse = (float)( 2. * halfpulse );
 
-        float relphase = t % period;
-        float distancePastPulseOnset = max( 0., min( relphase - phase - halfpulse, phase - halfpulse + ( period - relphase ) ) );
+        float relphase = ( t + pulse ) % period;
+        float distancePastPulseOnset = (float)( clamp( relphase - phase - halfpulse, 0., pulse + 1. ) );
+        //min( relphase - phase - halfpulse, phase - halfpulse + ( period - relphase ) );
 
+        // FIXME REMOVE BRANCHING LOGIC
         if ( distancePastPulseOnset > pulse )
             return 0.;
         else
             return distancePastPulseOnset / pulse;
-/*
-        float pph = .5 * (float)( pulsePhase( t ) );
-
-        int relphase = t % period;
-        int distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase ) );
-
-        // FIXME REMOVE BRANCHING LOGIC
-       // float skph = max( pph, ( 1. - pph ) * sign( distanceFromPulseCenter ) );/// abs( distanceFromPulseCenter ) );
-        float skph;
-        if ( distanceFromPulseCenter <= 0 )
-            skph = pph;
-        else if ( distanceFromPulseCenter < halfpulse * 2 )
-            skph = 1. - pph;
-        else
-            skph = 0.;
-/*
-
-        float skph = 
-        int relphase = t % period;
-      float distancePastPulseOnset = /*max( 0., min( relphase - phase - halfpulse, phase - halfpulse + ( period - relphase ) ) ;//);
-
- /*       float pulse = (float)( halfpulse * 2 ); // FIXME -1 OR WITHOUT -1 ?
-
-        float skph = distancePastPulseOnset / pulse ;
-*///        float skph = 1. - (float)( clamp( pulse - abs( distanceFromPulseOnset ), 0., pulse ) / pulse );
-
-/*        int relphase = t % period;
-        int distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase ) );
- 
-        float skph = (float)( clamp( (float)( halfpulse - abs( distanceFromPulseCenter ) ), 0., (float)( halfpulse ) )
-                                / (float)( 2. * halfpulse ) );
-
-        // So far it's the same as pulsePhase(), but scaled to [ 0, .5 ]
-        // Now, if we're past the pulse center, we need to add .5
-        // FIXME: This feels inelegant, can we improve it?
-        skph += max( 0., .5 * distanceFromPulseCenter / abs( distanceFromPulseCenter ) );
-*/
     }
 }
 
