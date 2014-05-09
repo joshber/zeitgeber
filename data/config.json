@@ -15,10 +15,10 @@
 	},
 
 	"default": {
-		"streamPath":			"Mai 2014",
+		"path":					"Mai 2014",
 
-		"pulseRadius":			2000,
-		"pulseSkew":			0.,
+		"halfpulse":			2000,
+		"skew":					0.,
 		"period":				8000,
 		"phase":				.5,
 		"gain":					3.,
@@ -32,11 +32,11 @@
 	"oscillators": [
 		{
 			"stream":				"stream 1",
-			"phase":				0,
+			"phase":				.5,
 			"period":				8000,
-			"pulseRadius":			2000,
+			"halfpulse":			500,
 			"gain":					6.,
-			"pulseSkew":			10.,
+			"skew":					2.,
 			"balance":				[ 1., 1., 1. ]
 		},
 		{

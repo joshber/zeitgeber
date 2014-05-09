@@ -58,7 +58,7 @@ uniform float halfpulse0;
 uniform float halfpulse1;
 uniform float halfpulse2;
 
-uniform float skew0;
+uniform float skew0; // > 0 means peak advance
 uniform float skew1;
 uniform float skew2;
 
@@ -90,7 +90,7 @@ uniform float dStart;
 uniform float dEnd;
 */
 
-// pulse phase in [0,1] -- 0 off-pulse, 1 at center
+// pulse phase in [ 0, 1 ] -- 0 off-pulse, 1 at center
 float pulsePhase( float period, float phase, float halfpulse ) {
 	float relphase = mod( time, period );
 	float distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase) );
@@ -99,12 +99,12 @@ float pulsePhase( float period, float phase, float halfpulse ) {
 }
 
 // Easing to simulate Fourier modeling of pulse shape
-// - Start with pulse phase in [0,1]
-// - Map it to [ sin(-π/2), sin(π/2) ], map that back to [0,1]
+// - Start with pulse phase in [ 0, 1 ]
+// - Map it to [ sin(-π/2), sin(π/2) ], map that back to [ 0, 1 ]
 // - Map that to [ 1., gain ]
 //
 float easing( float phase, float skew, float gain ) {
-	float scaledPhase = PI * ( abs( phase ) - .5 );
+	float scaledPhase = PI * ( phase - .5 ); // FIXME CHECK: REMOVED ABS ( PHASE )
 
 	float pulse = .5 + .5 * sin( scaledPhase );
 

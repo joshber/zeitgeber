@@ -129,8 +129,8 @@ void visualizer() {
     resetShader();
     pushStyle();
 
-    float oscH = 50.;
-    float visualizerH = oscH * nOscillators + 20.;
+    float oscH = 55.;
+    float visualizerH = oscH * nOscillators + 30.;
 
     // Scrim to enhance overlay visibility
     fill( color( 1., 1., 1., .75 ) );
@@ -145,7 +145,8 @@ void visualizer() {
 
         PVector balance = oscillators[i].balance;
         float denom = balance.x + balance.y + balance.z;
-        color c = color( oscillators[i].balance.x / denom, oscillators[i].balance.y / denom, oscillators[i].balance.z / denom );
+        color c = color(    oscillators[i].balance.x / denom, oscillators[i].balance.y / denom,
+                            oscillators[i].balance.z / denom, 1. );
         stroke( c );
         fill( c );
 
@@ -153,25 +154,33 @@ void visualizer() {
         textSize( 10 );
         text( oscillators[i].name, 90, 0 );
 
+        c = color(  oscillators[i].balance.x / denom, oscillators[i].balance.y / denom,
+                    oscillators[i].balance.z / denom, .5 );
         line( 100, 0, width - 100, 0 );
 
         int period = oscillators[i].period;
 
         // Dot contour for the pulse
         for ( int j = 0; j < 5; ++j ) {
-            c = color( oscillators[i].balance.x / denom, oscillators[i].balance.y / denom, oscillators[i].balance.z / denom,
-                        1. -  j * .2 );
+            c = color(  oscillators[i].balance.x / denom, oscillators[i].balance.y / denom,
+                        oscillators[i].balance.z / denom, 1. -  j * .2 /* fade the dots into the past */ );
             stroke( c );
             fill( c );
 
-            int spacingFactor = oscillators[i].halfpulse / 10;
-            float phase = (float)( oscillators[i].pulsePhase( millis() - j * spacingFactor ) );
+            int spacingFactor = 100;
+            int t = millis() - j * spacingFactor;
+
+            float phase = (float)( oscillators[i].pulsePhase( t ) );
 
             float scaledPhase = PI * ( abs( phase ) - .5 );
 
-            float pulse = -(oscH - 10.) * ( .5 + .5 * sin( scaledPhase ) ); //- /*oscillators[i].pulseSkew */ max( 0, scaledPhase ) ) ); 
+            float skew = oscillators[i].skew * sin( PI * oscillators[i].skewPhase( t ) );
+            float pulse = -(oscH - 15.) * ( .5 + .5 * sin( scaledPhase - skew ) );
 
-            ellipse( map( ( millis() - j * spacingFactor ) % period, 0, period, 101, width - 100 ), pulse, 3, 3 );
+            ellipse( map( t % period, 0, period, 101, width - 100 ), pulse, 3, 3 );
+
+            if ( i == 0 && j == 0 ) println( "skew phase: " + oscillators[i].skewPhase( t ) );
+
         }
     }
 
@@ -224,8 +233,8 @@ void loadConfig( boolean loadStreams ) {
     // Get default oscillator parameters
     // TODO: Can we incorporate this into the loop below for greater regularity, less duplication?
     JSONObject defaultOsc = config.getJSONObject( "default" );
-    int pulseRadiusDef = defaultOsc.getInt( "pulseRadius" );
-    float pulseSkewDef = defaultOsc.getFloat( "pulseSkew" );
+    int halfpulseDef = defaultOsc.getInt( "halfpulse" );
+    float skewDef = defaultOsc.getFloat( "skew" );
     int periodDef = defaultOsc.getInt( "period" );
     float phaseDef = defaultOsc.getFloat( "phase" );
     float gainDef = defaultOsc.getFloat( "gain" );
@@ -236,7 +245,7 @@ void loadConfig( boolean loadStreams ) {
 
     String streamPath = "";
     if ( loadStreams ) {
-        streamPath = defaultOsc.getString( "streamPath" );
+        streamPath = defaultOsc.getString( "path" );
 
         // Ensure trailing /
         if ( ! streamPath.equals( "" ) && streamPath.charAt( streamPath.length() - 1 ) != '/' )
@@ -255,8 +264,8 @@ void loadConfig( boolean loadStreams ) {
     for ( int i = 0; i < nOscillators; ++i ) {
         JSONObject osc = oscParams.getJSONObject( i );
 
-        int pulseRadius = osc.hasKey( "pulseRadius" ) ? osc.getInt( "pulseRadius" ) : pulseRadiusDef;
-        float pulseSkew = osc.hasKey( "pulseSkew" ) ? osc.getFloat( "pulseSkew" ) : pulseSkewDef;
+        int halfpulse = osc.hasKey( "halfpulse" ) ? osc.getInt( "halfpulse" ) : halfpulseDef;
+        float skew = osc.hasKey( "skew" ) ? osc.getFloat( "skew" ) : skewDef;
         int period = osc.hasKey( "period" ) ? osc.getInt( "period" ) : periodDef;
         float phase = osc.hasKey( "phase" ) ? osc.getFloat( "phase" ) : phaseDef;
         float gain = osc.hasKey( "gain" ) ? osc.getFloat( "gain" ) : gainDef;
@@ -285,8 +294,8 @@ void loadConfig( boolean loadStreams ) {
                                             i,              // id
                                             streamHandle,   // name
                                             s,              // video stream
-                                            pulseRadius, 
-                                            pulseSkew, 
+                                            halfpulse, 
+                                            skew, 
                                             period, 
                                             phase, 
                                             gain,  
@@ -298,8 +307,8 @@ void loadConfig( boolean loadStreams ) {
             // A little crude, but I'd rather not muck around with move semantics
             // (i.e., moving Movies to new oscillators)
             oscillators[i].reconfig(
-                                    pulseRadius, 
-                                    pulseSkew, 
+                                    halfpulse, 
+                                    skew, 
                                     period, 
                                     phase, 
                                     gain,
@@ -359,7 +368,7 @@ class Oscillator {
     Oscillator() { }
 
     Oscillator( int id_, String name_, Movie s_, 
-                int pulseR_, float pulseS_, 
+                int halfpulse_, float skew_, 
                 int period_, float phase_, 
                 float gain_, PVector balance_, 
                 float perRCH, float gainRCH
@@ -368,17 +377,17 @@ class Oscillator {
         name = name_;
         s = s_;
 
-        reconfig( pulseR_, pulseS_, period_, phase_, gain_, balance_, perRCH, gainRCH );
+        reconfig( halfpulse_, skew_, period_, phase_, gain_, balance_, perRCH, gainRCH );
     }
 
     void reconfig (
-                int pulseR_, float pulseS_, 
+                int halfpulse_, float skew_, 
                 int period_, float phase_, 
                 float gain_, PVector balance_, 
                 float perRCH, float gainRCH
             ) {        
-        halfpulse = pulseR_;
-        pulseSkew = pulseS_;
+        halfpulse = halfpulse_;
+        skew = skew_;
 
         period = period_;
         phase = int( phase_ * period ); // Map phase to period
@@ -398,7 +407,7 @@ class Oscillator {
         // Ints passed as floats bc GLSL < 3.0 can't do modulus on ints
 
         sh.set( "halfpulse" + id, float(halfpulse) );
-        sh.set( "skew" + id, pulseSkew );
+        sh.set( "skew" + id, skew );
 
         sh.set( "period" + id, float(period) );
         sh.set( "phase" + id, float(phase) );
@@ -407,7 +416,7 @@ class Oscillator {
         sh.set( "balance" + id, balance );
     }
 
-    // pulse phase in [0,1] -- 0 off-pulse, 1 at center of pulse
+    // pulse phase in [ 0,1 ] -- 0 off-pulse, 1 at center of pulse
     double pulsePhase( int t ) {
         int relphase = t % period;
         int distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase ) );
@@ -416,15 +425,55 @@ class Oscillator {
                         / (float)( halfpulse );
     }
 
-    // pulse phase in [0,1] -- 0 == onset, 1 == offset
+    // pulse phase in [ 0, 1 ] -- 0 == onset, 1 == offset
     // FIXME IS THIS CORRECT? WHIPPED IT OFF, NOT SURE
-    double skewPhase( int t ) {
-        double pulse = (float)( halfpulse * 2 - 1 ); // FIXME -1 OR WITHOUT -1 ?
+    float skewPhase( int t ) {
+        float pulse = (float)( 2. * halfpulse );
+
+        float relphase = t % period;
+        float distancePastPulseOnset = max( 0., min( relphase - phase - halfpulse, phase - halfpulse + ( period - relphase ) ) );
+
+        if ( distancePastPulseOnset > pulse )
+            return 0.;
+        else
+            return distancePastPulseOnset / pulse;
+/*
+        float pph = .5 * (float)( pulsePhase( t ) );
 
         int relphase = t % period;
-        int distanceFromPulseOnset = min( relphase - phase - halfpulse, phase - halfpulse + ( period - relphase ) );
+        int distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase ) );
 
-        return 1. - ( clamp( pulse - abs( distanceFromPulseOnset ), 0., pulse ) / pulse );
+        // FIXME REMOVE BRANCHING LOGIC
+       // float skph = max( pph, ( 1. - pph ) * sign( distanceFromPulseCenter ) );/// abs( distanceFromPulseCenter ) );
+        float skph;
+        if ( distanceFromPulseCenter <= 0 )
+            skph = pph;
+        else if ( distanceFromPulseCenter < halfpulse * 2 )
+            skph = 1. - pph;
+        else
+            skph = 0.;
+/*
+
+        float skph = 
+        int relphase = t % period;
+      float distancePastPulseOnset = /*max( 0., min( relphase - phase - halfpulse, phase - halfpulse + ( period - relphase ) ) ;//);
+
+ /*       float pulse = (float)( halfpulse * 2 ); // FIXME -1 OR WITHOUT -1 ?
+
+        float skph = distancePastPulseOnset / pulse ;
+*///        float skph = 1. - (float)( clamp( pulse - abs( distanceFromPulseOnset ), 0., pulse ) / pulse );
+
+/*        int relphase = t % period;
+        int distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase ) );
+ 
+        float skph = (float)( clamp( (float)( halfpulse - abs( distanceFromPulseCenter ) ), 0., (float)( halfpulse ) )
+                                / (float)( 2. * halfpulse ) );
+
+        // So far it's the same as pulsePhase(), but scaled to [ 0, .5 ]
+        // Now, if we're past the pulse center, we need to add .5
+        // FIXME: This feels inelegant, can we improve it?
+        skph += max( 0., .5 * distanceFromPulseCenter / abs( distanceFromPulseCenter ) );
+*/
     }
 }
 
