@@ -54,14 +54,6 @@ uniform sampler2D stream0;
 uniform sampler2D stream1;
 uniform sampler2D stream2;
 
-uniform float halfpulse0;
-uniform float halfpulse1;
-uniform float halfpulse2;
-
-uniform float skew0; // > 0 means peak advance
-uniform float skew1;
-uniform float skew2;
-
 uniform float period0; // in ms
 uniform float period1;
 uniform float period2;
@@ -69,6 +61,10 @@ uniform float period2;
 uniform float phase0; // in ms
 uniform float phase1;
 uniform float phase2;
+
+uniform float halfpulse0; // in ms
+uniform float halfpulse1;
+uniform float halfpulse2;
 
 uniform float gain0; // 1-based, i.e. a coefficient
 uniform float gain1;
@@ -93,9 +89,14 @@ uniform float dEnd;
 // pulse phase in [ 0, 1 ] -- 0 off-pulse, 1 at center
 float pulsePhase( float period, float phase, float halfpulse ) {
 	float relphase = mod( time, period );
-	float distanceFromPulseCenter = min( relphase - phase, phase + ( period - relphase) );
 
-	return clamp( halfpulse - abs( distanceFromPulseCenter ), 0., halfpulse ) / halfpulse;
+	float basecase = abs( relphase - phase );
+	float phaseNear0 = abs( phase + ( period - relphase ) );
+	float phaseNear1 = abs( relphase + ( period - phase ) );
+
+    float distanceFromPulseCenter = min( min( basecase, phaseNear0 ), phaseNear1 );
+
+	return clamp( halfpulse - distanceFromPulseCenter, 0., halfpulse ) / halfpulse;
 }
 
 // Easing to simulate Fourier modeling of pulse shape
@@ -103,9 +104,8 @@ float pulsePhase( float period, float phase, float halfpulse ) {
 // - Map it to [ sin(-π/2), sin(π/2) ], map that back to [ 0, 1 ]
 // - Map that to [ 1., gain ]
 //
-float easing( float phase, float skew, float gain ) {
-	float scaledPhase = PI * ( phase - .5 ); // FIXME CHECK: REMOVED ABS ( PHASE )
-
+float easing( float phase, float gain ) {
+	float scaledPhase = PI * ( phase - .5 );
 	float pulse = .5 + .5 * sin( scaledPhase );
 
 	return 1. + pulse * ( gain - 1. );
@@ -114,15 +114,15 @@ float easing( float phase, float skew, float gain ) {
 // Right now, pulse expression is just an RGB-weighted brightness enhancement,
 // eased according to where in the time course of the pulse we are (pulsePhase)
 //
-vec3 pulse( vec3 c, float pulsePhase, float skew, float gain, vec3 balance ) {
-	return balance.rgb * c.rgb * easing( pulsePhase, skew, gain );
+vec3 pulse( vec3 c, float pulsePhase, float gain, vec3 balance ) {
+	return balance.rgb * c.rgb * easing( pulsePhase, gain );
 		// Achtung, color balance here is a MULTIPLIER, not an apportioner
 }
 
 // FIXME: Sinusoidal distortion -- DEVELOP
 //
 vec2 distort( vec2 p ) {
-	return p;
+	//return p;
 	// if ( time > dEnd ) return p;
 
 	//vec2 dp;
@@ -141,8 +141,8 @@ vec2 distort( vec2 p ) {
 */
 	float gainY = .01;
 	float freqY = 1000. / 10.;
-	float centerlineY = .5;
-	float decayY = 2.;
+	float centerlineY = .2;
+	float decayY = 10.;
 	
 	p.s +=	gainY * sin( p.t * time / freqY )
 			* pow( p.s < centerlineY ? p.s / centerlineY : ( 1. - p.s ) / ( 1. - centerlineY ), decayY );
@@ -190,13 +190,13 @@ void main() {
 	// or use a vec2 with sign represented separately
 
 	if ( pulsePhase0 > 0. ) {
-		c0.rgb = pulse( c0.rgb, pulsePhase0, skew0, gain0, balance0 );
+		c0.rgb = pulse( c0.rgb, pulsePhase0, gain0, balance0 );
 	}
 	if ( pulsePhase1 > 0. ) {
-		c1.rgb = pulse( c1.rgb, pulsePhase1, skew1, gain1, balance1 );
+		c1.rgb = pulse( c1.rgb, pulsePhase1, gain1, balance1 );
 	}
 	if ( pulsePhase2 > 0. ) {
-		c2.rgb = pulse( c2.rgb, pulsePhase2, skew2, gain2, balance2 );
+		c2.rgb = pulse( c2.rgb, pulsePhase2, gain2, balance2 );
 	}
 
 	// TODO: Rethink
