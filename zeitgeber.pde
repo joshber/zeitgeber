@@ -9,7 +9,7 @@ import processing.video.*;
 // Clean up float / int thing in oscillator members
 
 // TOP TODO
-// VISUALIZER -- ADD DISTORTION
+// VISUALIZER -- ADD DISTORTION -- less opaque when inactive etc
 // Finish distortion -- NOT balanced by stream, uniform across them
 //
 // THEN: It's time to get to entrainment
@@ -165,16 +165,15 @@ void visualizer() {
         float scaledHalfpulse = map( oscillators[i].halfpulse, 0, period, 0, width - 200 );
         float scaledPhaseCenter = map( oscillators[i].phase, 0, period, 0, width - 200 );
 
-        // FIXME STILL DOES NOT HANDLE EDGES PROPERLY -- NEED HANDLING OF NEGATIVES
-        float scaledStart = ( scaledPhaseCenter - scaledHalfpulse ) % ( width - 200 );
-        if ( scaledStart < 0 )
-            scaledStart = width - 200 - scaledStart;
+        // FIXME: Can we do this without branching logic?
+        float scaledStart = scaledPhaseCenter - scaledHalfpulse;
+        if ( scaledStart < 0. )
+            scaledStart = width - 200 + scaledStart;
         float scaledEnd = ( scaledPhaseCenter + scaledHalfpulse ) % ( width - 200 );
 
-        line( 100 + scaledPhaseCenter, 1., 100 + scaledPhaseCenter, 2. );
-        line( 100 + scaledStart, 1., 100 + scaledStart, 2. );
-        line( 100 + scaledEnd, 1., 100 + scaledEnd, 2. );
-
+        line( 100 + scaledPhaseCenter, 1., 100 + scaledPhaseCenter, 5. );
+        line( 100 + scaledStart, 1., 100 + scaledStart, 3. );
+        line( 100 + scaledEnd, 1., 100 + scaledEnd, 3. );
 
         // Dot contour for the pulse
         for ( int j = 0; j < 5; ++j ) {
@@ -191,7 +190,7 @@ void visualizer() {
 
             float pulse = -(oscH - 15.) * ( .5 + .5 * sin( scaledPhase ) );
 
-            ellipse( map( t % period, 0, period, 101, width - 100 ), pulse, 3, 3 );
+            ellipse( map( t % period, 0, period, 100, width - 100 ), pulse, 3, 3 );
         }
     }
 
