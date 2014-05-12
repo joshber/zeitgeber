@@ -133,11 +133,6 @@ vec2 distort( vec2 p ) {
 
 	float freq = 1000. / dFreq; // dFreq is in Hz
 	
-	// FIXME the sin( p.t * time / freq ) is generating a meta-oscillation -- frequency varies over time course
-	// it's kind of cool, but not what we wanted initially
-	// do we want simply freq ? -- no! produces static distortions
-	// time % 1000. / freq ? -- well, that looks cool but it's more of a slow ripple
-
 	float distortionY =
 			dGain * sin( p.t * time / freq )
 			* pow( p.s < dYaxis ? p.s / dYaxis : ( 1. - p.s ) / ( 1. - dYaxis ), dDecay );
@@ -145,11 +140,16 @@ vec2 distort( vec2 p ) {
 				// The branch is to make the decay proportional to the distance
 				// from the y-axis to the nearer edge of the texture
 
+	// Ease in and out
+	float midpoint = dStart + .5 * ( dEnd - dStart );
+	float phase = ( midpoint - time ) / ( midpoint - dStart );
+	float easing = .5 + .5 * sin( PI * ( phase - .5 ) );
+
 	// FIXME: is GLSL pass-by-value for vecN unless you use inout in the parameter prototype?
 
 	vec2 q = p;
-	q.s += sin( dHeading ) * distortionY;
-	q.t += cos( dHeading ) * distortionY;
+	q.s += sin( dHeading ) * distortionY * easing;
+	q.t += cos( dHeading ) * distortionY * easing;
 
 	return q;
 }
@@ -167,10 +167,10 @@ void main() {
 	// Add distortion as appropriate
 	vec2 d = distort( pos );
 
-	//d = pos; //distort( pos );
-	vec2 p0 = dBalance0 > 0. ? d : pos;
-	vec2 p1 = dBalance1 > 0. ? d : pos;
-	vec2 p2 = dBalance2 > 0. ? d : pos;
+	// Apply distortion
+	vec2 p0 = d * dBalance0 + pos * ( 1. - dBalance0 );
+	vec2 p1 = d * dBalance1 + pos * ( 1. - dBalance1 );
+	vec2 p2 = d * dBalance2 + pos * ( 1. - dBalance2 );
 
 	// Sample texture data for current fragment
 	vec4 c0 = texture2D( stream0, p0 );

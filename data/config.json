@@ -4,12 +4,12 @@
 	"shader": "frag0",
 	
 	"distortion": {
-		"incidence":			.05,
+		"incidence":			.5,
 
 		"comment_":				"Two scaling factors, one for the lognormal, one applied to the result of the lognormal. mean(lognormal(0,.25)) ≈ 1",
-		"gain":					[ .25, .01 ],
-		"frequency":			[ .25, 200. ],
-		"decay":				[ .25, 5. ],
+		"gain":					[ .25, .25 ],
+		"frequency":			[ .25, 500. ],
+		"decay":				[ .25, 10. ],
 		"duration":				[ .25, 2000. ],
 	},
 

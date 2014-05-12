@@ -10,8 +10,8 @@ import processing.video.*;
 
 // TOP TODO
 // VISUALIZER -- ADD DISTORTION -- less opaque when inactive etc
-// Finish distortion -- *** Balanced by stream
-// Distortion: Add easing in shader
+// Finish distortion
+// MAKE DISTORTION NOISE-CONTINGENT with minim?
 //
 // THEN: It's time to get to entrainment
 //
@@ -63,6 +63,7 @@ import processing.video.*;
 
 
 boolean showVisualizer = false;
+double updateRate = .125; // odds on a given frame we'll update oscillators
 
 Random theRNG; // For generating noise terms
 
@@ -88,8 +89,8 @@ void setup() {
 void draw() {
     background( color( 0., 0., 0., 1. ) );
 
-    // Every 12 frames, stochastically ...
-    if ( theRNG.nextDouble() > .875 ) {
+    // Every so many frames, stochastically ...
+    if ( theRNG.nextDouble() < updateRate ) {
         // Check to see if any oscillators are on the pulse
         for ( int i = 0; i < nOscillators; ++i ) {
             double pulsePhase = oscillators[i].pulsePhase( millis() );
@@ -101,9 +102,9 @@ void draw() {
             // - Enqueue zeitgeber in the ØMQ pipe
             // - Handle enqueued zeitgeber
         }
-    }
 
-    distortion.maybeDistort();
+        distortion.maybeDistort();
+    }
 
     // Update shader uniforms with texture frame data and oscillator params
     for ( int i = 0; i < nOscillators; ++i ) {
@@ -466,7 +467,7 @@ double lognormal( double mean, double sd ) {
 }
 
 class Distortion {
-    float incidence; // incidence of distortion events
+    float incidence; // Incidence of distortion events per second
 
     // Distortion characteristics
     float gainM, gainS;
@@ -492,12 +493,18 @@ class Distortion {
         balance = new float[ nOscillators ];
     }
 
-    // FIXME COMMENT EXPLAIN DUAL SCALING FACTORS
+    // The M (= mean) are actually sigmas for the Gaussian underlying the lognormal we use
+    // to generate distortion pulse characteristics
+    // lognormal(0, .25) has a mean ≈ 1
+    // The S (= scale) are scaling factors applied to the results of the lognormals
+    // to get parameter-appropriate values
+    //
     void reconfig(  float incidence_,
                     float gainM_, float gainS_, float freqM_, float freqS_,
                     float decayM_, float decayS_, float durationM_, float durationS_
             ) {
-        incidence = incidence_;
+        // Scale for rate of oscillator update -- see draw()
+        incidence = incidence_  / (float)( updateRate ) / frameRate; 
         gainM = gainM_;
         gainS = gainS_;
         freqM = freqM_;
@@ -521,6 +528,7 @@ class Distortion {
         if ( end > t && end > start )
             return;
 
+        // Incidence is damped by the fact that we don't queue distortion events if one's in progress
         if ( theRNG.nextDouble() < incidence ) {
             // Asymmetric distributions, zero-anchored
             gain = gainS * (float) lognormal( 0, gainM );
@@ -534,7 +542,7 @@ class Distortion {
 
             end = start + durationS * (float) lognormal( 0, durationM );
 
-            // At least one oscillator is implicated
+            // At least one oscillator must be implicated
             int instigator = floor( (float) theRNG.nextDouble() ) % nOscillators;
 
             for ( int i = 0; i < nOscillators; ++i ) {
@@ -544,15 +552,10 @@ class Distortion {
                         // either it's implicated or it's not
             }
 
-            println( "gain=" + gain + " freq=" + freq + " decay=" + decay + " yaxis=" + yaxis + " heading=" + heading + " start=" + start + " end=" + end);
-            
-/*            gain = .05;
-            freq = 100.;
-            decay = 10.; */
+            //println( "gain=" + gain + " freq=" + freq + " decay=" + decay + " yaxis=" + yaxis + " heading=" + heading + " start=" + start + " end=" + end);
         }
         else {
-            println("not");
-            end = 0;
+            end = 0.;
                 // Reset end in case there's an expired distortion event
                 // that we have not yet cleaned up
         }
