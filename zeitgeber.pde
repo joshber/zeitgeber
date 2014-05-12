@@ -10,7 +10,8 @@ import processing.video.*;
 
 // TOP TODO
 // VISUALIZER -- ADD DISTORTION -- less opaque when inactive etc
-// Finish distortion -- NOT balanced by stream, uniform across them
+// Finish distortion -- *** Balanced by stream
+// Distortion: Add easing in shader
 //
 // THEN: It's time to get to entrainment
 //
@@ -61,7 +62,7 @@ import processing.video.*;
 // All response curves also have a Gaussian error term
 
 
-boolean showVisualizer;
+boolean showVisualizer = false;
 
 Random theRNG; // For generating noise terms
 
@@ -69,6 +70,7 @@ PShader shadr;
 
 int nOscillators;
 Oscillator[] oscillators;
+Distortion distortion;
 
 void setup() {
     size( 1280, 720, P2D );
@@ -77,8 +79,6 @@ void setup() {
     colorMode( RGB, 1.0 );
     fill( color( 1., 1., 1., 1. ) ); // In case we * vertColor in the fragment shader
     noStroke();
-
-    showVisualizer = false;
 
     theRNG = new Random( /* long seed */ );
 
@@ -103,12 +103,13 @@ void draw() {
         }
     }
 
-    // FIXME: HANDLE DISTORTION
+    distortion.maybeDistort();
 
     // Update shader uniforms with texture frame data and oscillator params
     for ( int i = 0; i < nOscillators; ++i ) {
-        oscillators[i].setShader(shadr);
+        oscillators[i].setShader( shadr );
     }
+    distortion.setShader( shadr );
 
     shadr.set( "time", float( millis() ) );
         // Passed as float bc GLSL < 3.0 can't do modulus on ints
@@ -240,6 +241,14 @@ void loadConfig( boolean loadStreams ) {
     shadr = loadShader( "shaders/" + config.getString( "shader" ) + ".glsl" );
     shadr.set( "resolution", float(width), float(height) );
 
+    JSONObject disto = config.getJSONObject( "distortion" );
+    float incidence = disto.getFloat( "incidence" );
+    JSONArray dgain, freq, decay, duratn;
+    dgain = disto.getJSONArray( "gain" );
+    freq = disto.getJSONArray( "frequency" );
+    decay = disto.getJSONArray( "decay" );
+    duratn = disto.getJSONArray( "duration" );
+
     // Get default oscillator parameters
     // TODO: Can we incorporate this into the loop below for greater regularity, less duplication?
     JSONObject defaultOsc = config.getJSONObject( "default" );
@@ -268,7 +277,26 @@ void loadConfig( boolean loadStreams ) {
 
     nOscillators = oscParams.size();
     if ( loadStreams )
-        oscillators = new Oscillator[nOscillators];
+        oscillators = new Oscillator[ nOscillators ];
+
+    // This has to go after nOscillators is configured,
+    // since Distortion maintains a per-oscillator balance array
+    if ( loadStreams ) {
+        distortion = new Distortion(    incidence,
+                                        dgain.getFloat( 0 ), dgain.getFloat( 1 ),
+                                        freq.getFloat( 0 ), freq.getFloat( 1 ),
+                                        decay.getFloat( 0 ), decay.getFloat( 1 ),
+                                        duratn.getFloat( 0 ), duratn.getFloat( 1 )
+                                );
+    }
+    else {
+        distortion.reconfig(            incidence,
+                                        dgain.getFloat( 0 ), dgain.getFloat( 1 ),
+                                        freq.getFloat( 0 ), freq.getFloat( 1 ),
+                                        decay.getFloat( 0 ), decay.getFloat( 1 ),
+                                        duratn.getFloat( 0 ), duratn.getFloat( 1 )
+                                );
+    }
 
     for ( int i = 0; i < nOscillators; ++i ) {
         JSONObject osc = oscParams.getJSONObject( i );
@@ -310,7 +338,8 @@ void loadConfig( boolean loadStreams ) {
                                             periodRCH, 
                                             gainRCH
                                 );
-        } else {
+        }
+        else {
             // A little crude, but I'd rather not muck around with move semantics
             // (i.e., moving Movies to new oscillators)
             oscillators[i].reconfig(
@@ -331,18 +360,6 @@ void loadConfig( boolean loadStreams ) {
 
 double clamp( double x, double a, double b ) {
     return x < a ? a : x > b ? b : x;
-}
-
-double gaussian( double mean, double sd ) {
-    // Clamping at 6 sigma should not introduce too much squaring ...
-    return mean + sd * clamp( theRNG.nextGaussian(), -6., 6. );
-}
-
-// When we need a zero-anchored distribution
-// http://en.wikipedia.org/wiki/Log-normal_distribution
-//
-double lognormal( double mean, double sd ) {
-    return Math.exp( gaussian( mean, sd ) );
 }
 
 // Perlin's Hermite 6x^5 - 15x^4 + 10x^3
@@ -436,6 +453,123 @@ class Oscillator {
 //
 // Distortion-related
 
-class Distortion {
+double gaussian( double mean, double sd ) {
+    // Clamping at 6 sigma should not introduce too much squaring ...
+    return mean + sd * clamp( theRNG.nextGaussian(), -6., 6. );
+}
 
+// When we need a zero-anchored distribution
+// http://en.wikipedia.org/wiki/Log-normal_distribution
+//
+double lognormal( double mean, double sd ) {
+    return Math.exp( gaussian( mean, sd ) );
+}
+
+class Distortion {
+    float incidence; // incidence of distortion events
+
+    // Distortion characteristics
+    float gainM, gainS;
+    float freqM, freqS;
+    float decayM, decayS;
+    float durationM, durationS;
+
+    // Distortion event parameters
+    float start, end;
+    float[] balance;
+    float gain, freq, decay;
+    float yaxis, heading;
+
+    Distortion() { }
+
+    Distortion( float incidence_,
+                float gainM_, float gainS_, float freqM_, float freqS_,
+                float decayM_, float decayS_, float durationM_, float durationS_
+            ) {
+        reconfig( incidence_, gainM_, gainS_, freqM_, freqS_, decayM_, decayS_, durationM_, durationS_ );
+
+        start = end = 0;
+        balance = new float[ nOscillators ];
+    }
+
+    // FIXME COMMENT EXPLAIN DUAL SCALING FACTORS
+    void reconfig(  float incidence_,
+                    float gainM_, float gainS_, float freqM_, float freqS_,
+                    float decayM_, float decayS_, float durationM_, float durationS_
+            ) {
+        incidence = incidence_;
+        gainM = gainM_;
+        gainS = gainS_;
+        freqM = freqM_;
+        freqS = freqS_;
+        decayM = decayM_;
+        decayS = decayS_;
+        durationM = durationM_;
+        durationS = durationS_;
+    }
+
+    void maybeDistort() {
+        float t = (float) millis();
+
+        // If the clock has wrapped around
+        if ( start > t ) {
+            start = t;
+            return;
+        }
+
+        // If there's a distortion event in progress, don't consider starting a new one
+        if ( end > t && end > start )
+            return;
+
+        if ( theRNG.nextDouble() < incidence ) {
+            // Asymmetric distributions, zero-anchored
+            gain = gainS * (float) lognormal( 0, gainM );
+            freq = freqS * (float) lognormal( 0, freqM );
+            decay = decayS * (float) lognormal( 0, decayM );
+
+            yaxis = (float) gaussian( .5, .1 ); // Keep it mostly close to the center of the image
+            heading = (float) theRNG.nextDouble();
+
+            start = (float) millis();
+
+            end = start + durationS * (float) lognormal( 0, durationM );
+
+            // At least one oscillator is implicated
+            int instigator = floor( (float) theRNG.nextDouble() ) % nOscillators;
+
+            for ( int i = 0; i < nOscillators; ++i ) {
+                // Fifty percent of the time, at least three oscillators are implicated
+                balance[i] = ( i == instigator || theRNG.nextDouble() < .7072 ) ? 1. : 0. ;
+                        // At the moment we're not varying the gain among oscillators--
+                        // either it's implicated or it's not
+            }
+
+            println( "gain=" + gain + " freq=" + freq + " decay=" + decay + " yaxis=" + yaxis + " heading=" + heading + " start=" + start + " end=" + end);
+            
+/*            gain = .05;
+            freq = 100.;
+            decay = 10.; */
+        }
+        else {
+            println("not");
+            end = 0;
+                // Reset end in case there's an expired distortion event
+                // that we have not yet cleaned up
+        }
+    }
+
+    void setShader( PShader sh ) {
+        sh.set( "dStart", start );
+        sh.set( "dEnd", end);
+        for ( int i = 0; i < nOscillators; ++i ) {
+            sh.set( "dBalance" + i, balance[i] );
+        }
+
+        sh.set( "dGain", gain );
+        sh.set( "dFreq", freq );
+        sh.set( "dDecay", decay );
+
+        sh.set( "dYaxis", yaxis );
+        sh.set( "dHeading", heading );
+    }
 }

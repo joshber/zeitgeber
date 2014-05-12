@@ -5,13 +5,12 @@
 	
 	"distortion": {
 		"incidence":			.05,
-		"gain":					[ .01, .005 ],
-		"freq":					[ 100., 100. ],
-		"centerline":			[ .5, .2 ],
-		"heading":				[ 1.57079632679, .19634954084 ],
-		"_comment":				"^^ == [ π/2, π/16 ], so it usually stays pretty close to vertical",
-		"decay":				[ 10., 5. ],
-		"duration":				[ 200, 100 ]
+
+		"comment_":				"Two scaling factors, one for the lognormal, one applied to the result of the lognormal. mean(lognormal(0,.25)) ≈ 1",
+		"gain":					[ .25, .01 ],
+		"frequency":			[ .25, 200. ],
+		"decay":				[ .25, 5. ],
+		"duration":				[ .25, 2000. ],
 	},
 
 	"default": {
@@ -32,10 +31,10 @@
 		{
 			"stream":				"stream 1",
 			"phase":				.1,
-			"period":				8000,
-			"halfpulse":			500,
+			"period":				2000,
+			"halfpulse":			200,
 			"gain":					12.,
-			"balance":				[ 3., 1., 1. ]
+			"balance":				[ 3., 1., 1. ],
 		},
 		{
 			"stream":				"stream 2",

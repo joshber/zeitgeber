@@ -76,15 +76,21 @@ uniform vec3 balance2;
 
 //
 // Distortion uniforms
-/*
-uniform float dGain;
-uniform float dFreq;
-uniform float dCenterline;
-uniform float dHeading;
-uniform float dDecay;
+
 uniform float dStart;
 uniform float dEnd;
-*/
+
+uniform float dBalance0;
+uniform float dBalance1;
+uniform float dBalance2;
+
+uniform float dGain;
+uniform float dFreq;
+uniform float dDecay;
+
+uniform float dYaxis;
+uniform float dHeading;
+
 
 // pulse phase in [ 0, 1 ] -- 0 off-pulse, 1 at center
 float pulsePhase( float period, float phase, float halfpulse ) {
@@ -119,36 +125,33 @@ vec3 pulse( vec3 c, float pulsePhase, float gain, vec3 balance ) {
 		// Achtung, color balance here is a MULTIPLIER, not an apportioner
 }
 
-// FIXME: Sinusoidal distortion -- DEVELOP
+// Distortion!
+// TODO: EASING OVER TIME COURSE, SAME AS WITH OSCILLATOR PULSES
 //
 vec2 distort( vec2 p ) {
-	//return p;
-	// if ( time > dEnd ) return p;
+	if ( dEnd <= 0. || dEnd <= dStart ) return p;
 
-	//vec2 dp;
-
-/*	float halfpulse = .5 * ( dEnd - dStart );
-	float phase = 1. - ( abs( halfpulse - ( time - dStart ) ) / halfpulse );
-		// [0,1], 0 at edge of distortion pulse, 1 at peak
-
-	float easing = .5 + .5 * sin( PI * ( phase - .5 ) );
-
-
-	float freq = 1000. / dFreq;
-	dp.s = sin( dHeading ) * ...
-	dp.t = cos( dHeading ) * ...
-	return p + dp * easing;
-*/
-	float gainY = .01;
-	float freqY = 1000. / 10.;
-	float centerlineY = .2;
-	float decayY = 10.;
+	float freq = 1000. / dFreq; // dFreq is in Hz
 	
-	p.s +=	gainY * sin( p.t * time / freqY )
-			* pow( p.s < centerlineY ? p.s / centerlineY : ( 1. - p.s ) / ( 1. - centerlineY ), decayY );
-				// 1. at the centerline, decays on either side from there
+	// FIXME the sin( p.t * time / freq ) is generating a meta-oscillation -- frequency varies over time course
+	// it's kind of cool, but not what we wanted initially
+	// do we want simply freq ? -- no! produces static distortions
+	// time % 1000. / freq ? -- well, that looks cool but it's more of a slow ripple
 
-	return p;
+	float distortionY =
+			dGain * sin( p.t * time / freq )
+			* pow( p.s < dYaxis ? p.s / dYaxis : ( 1. - p.s ) / ( 1. - dYaxis ), dDecay );
+				// 1. at the y-axis, decays on either side from there
+				// The branch is to make the decay proportional to the distance
+				// from the y-axis to the nearer edge of the texture
+
+	// FIXME: is GLSL pass-by-value for vecN unless you use inout in the parameter prototype?
+
+	vec2 q = p;
+	q.s += sin( dHeading ) * distortionY;
+	q.t += cos( dHeading ) * distortionY;
+
+	return q;
 }
 
 void main() {
@@ -162,12 +165,17 @@ void main() {
 	vec2 off = vec2( 1. / resolution.s, 1. / resolution.t );
 
 	// Add distortion as appropriate
-	pos.st = distort( pos );
+	vec2 d = distort( pos );
+
+	//d = pos; //distort( pos );
+	vec2 p0 = dBalance0 > 0. ? d : pos;
+	vec2 p1 = dBalance1 > 0. ? d : pos;
+	vec2 p2 = dBalance2 > 0. ? d : pos;
 
 	// Sample texture data for current fragment
-	vec4 c0 = texture2D( stream0, pos );
-	vec4 c1 = texture2D( stream1, pos );
-	vec4 c2 = texture2D( stream2, pos );
+	vec4 c0 = texture2D( stream0, p0 );
+	vec4 c1 = texture2D( stream1, p1 );
+	vec4 c2 = texture2D( stream2, p2 );
 
 	//
 	// For each stream, do something special if its oscillator is on-pulse
@@ -183,11 +191,6 @@ void main() {
 	// Add a flare, drawing in the color values from neighboring texels
 	// Look at http://glsl.heroku.com/e#15220.0 --
 	// Maybe use an exponential distance decay from current position
-
-	// TODO --
-	// Make pulsePhase ± so we can add some asymmetry to the easing -- sharper attack, longer decay etc
-	// Maybe have it vary [0,2], with >1 postpeak ...
-	// or use a vec2 with sign represented separately
 
 	if ( pulsePhase0 > 0. ) {
 		c0.rgb = pulse( c0.rgb, pulsePhase0, gain0, balance0 );
