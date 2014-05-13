@@ -30,11 +30,11 @@
 	"oscillators": [
 		{
 			"stream":				"stream 1",
-			"phase":				.1,
-			"period":				2000,
-			"halfpulse":			200,
-			"gain":					12.,
-			"balance":				[ 3., 1., 1. ],
+			"phase":				.2,
+			"period":				1000,
+			"halfpulse":			40,
+			"gain":					2.2,
+			"balance":				[ 1., 3., 1. ],
 		},
 		{
 			"stream":				"stream 2",

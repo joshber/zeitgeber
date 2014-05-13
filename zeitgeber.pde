@@ -13,6 +13,8 @@ import processing.video.*;
 // Finish distortion
 // MAKE DISTORTION NOISE-CONTINGENT with minim?
 //
+// Add hooks to Distortion to allow oscillator-targeted distortion, e.g. for Leap ix
+//
 // THEN: It's time to get to entrainment
 //
 //

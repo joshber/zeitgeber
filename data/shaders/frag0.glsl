@@ -1,26 +1,14 @@
-// FIXME PULSE PHASE AND EASING IS NOT CORRECT
-
-
-// TODO Develop the wiggle into something controlled by the controller
-// Set the envelope in config.json: µ and sd for gain, freq (1000. / f Hz -- pass in f), centerline, decay,
-// heading ( mean = π/2, s.d. = π/16 )
-// and for duration (Log-normal), and how often they occur (uniform -- so, exponential)
+// TODO
 //
-// Then start thinking about how distortion could be triggered by visitor activity ...
+// Start thinking about how distortion could be triggered by visitor activity ...
 // maybe certain activity increases the frequency, gain, etc
 // Maybe the distortion pulses should come in waves ... ?
 
-// ALSO easy to limit the distortion to a specific stream -- simply alter the fragment position just for that stream
-// So these envelopes shoudl be a on a per-oscillator basis ... or maybe a separate set of oscillators?
+// Should distortion envelopes be a on a per-oscillator basis ... or maybe a separate set of oscillators?
 // Ideally, would oscillator:stream be *:* ?
 // Then we'd have two types of oscillators, contrast and distortion
 // Each stream could take one of each ...
 // Might be too complex to implement just yet
-
-// BUT, I don't think the distortion should be oscillatory
-// It should be stochastic, defined by Gaussian envelopes as sketched above
-// And possibly event-triggered too
-// The controller can specify which streams a particular distortion pulse applies to
 
 
 // Zeitgeber v0.0001
@@ -126,8 +114,6 @@ vec3 pulse( vec3 c, float pulsePhase, float gain, vec3 balance ) {
 }
 
 // Distortion!
-// TODO: EASING OVER TIME COURSE, SAME AS WITH OSCILLATOR PULSES
-//
 vec2 distort( vec2 p ) {
 	if ( dEnd <= 0. || dEnd <= dStart ) return p;
 
@@ -146,6 +132,11 @@ vec2 distort( vec2 p ) {
 	float easing = .5 + .5 * sin( PI * ( phase - .5 ) );
 
 	// FIXME: is GLSL pass-by-value for vecN unless you use inout in the parameter prototype?
+
+	//
+	// Note we're using x-dimension perturbance for both dimensions here
+	// If we use a distortionX for q.t it doesn't look as good
+	// -- you get two orthogonal bands of perturbance, not a unified effect
 
 	vec2 q = p;
 	q.s += sin( dHeading ) * distortionY * easing;
@@ -179,7 +170,7 @@ void main() {
 
 	//
 	// For each stream, do something special if its oscillator is on-pulse
-	// Right now the something special is just heightened contrast
+	// Right now the something special is just color-balanced brightness enhancement
 
 	// Inspired by http://glsl.heroku.com/e#15220.0
 
@@ -202,11 +193,12 @@ void main() {
 		c2.rgb = pulse( c2.rgb, pulsePhase2, gain2, balance2 );
 	}
 
-	// TODO: Rethink
+	//
 	// Blend the textures
 	// We use a lighten blend, not a linear tween
 	// The video streams are characterized by dark backgrounds with bright shapes
 	// So a tween would mute the colors
+
 	vec4 blend = max( c0, max( c1, c2 ) );
 
 	gl_FragColor = vec4( blend.rgb, 1. ) ; //* vertColor;
