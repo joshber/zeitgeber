@@ -431,9 +431,10 @@ class Oscillator {
         sh.set( "period" + id, float(period) );
         sh.set( "phase" + id, float(phase) );
 
-        sh.set( "gain" + id, gain + (float) gaussian( 0., .0167 * gain ) );
-            // Modest noise in the strength of the gain
-            // -- 99 percent of the time it's ≤ 5 percent
+        sh.set( "gain" + id, gain /*+ (float) gaussian( 0., .0167 * gain )*/ );
+            // Debatable: Modest noise in the strength of the gain
+            // But I think this (frame-by-frame) is the wrong place for it -- interrupts easing
+            // Better to do it over a longer horizon
 
         sh.set( "balance" + id, balance );
     }
