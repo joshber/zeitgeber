@@ -118,8 +118,19 @@ vec2 distort( vec2 p ) {
 	if ( dEnd <= 0. || dEnd <= dStart ) return p;
 
 	float freq = 1000. / dFreq; // dFreq is in Hz
-	
-	float distortionY =
+/*
+	// Experiment in making the axis of perturbance orthongonal to the axis of the overall distortion
+	// The following is not really correct ... but probably not worth pursuing
+		
+	float orthogonal = dHeading - .5 * PI;
+	float axis0 = dYaxis * cos( dHeading );// + dYaxis * cos( dHeading );
+	float axis = p.s * sin( orthogonal ) + p.s * cos( orthogonal );
+
+	float distortion =
+			dGain * sin( axis * time / freq )
+			* pow( axis < axis0 ? axis / axis0 : ( 1. - axis ) / ( 1. - axis0 ), dDecay );
+*/
+	float distortion =
 			dGain * sin( p.t * time / freq )
 			* pow( p.s < dYaxis ? p.s / dYaxis : ( 1. - p.s ) / ( 1. - dYaxis ), dDecay );
 				// 1. at the y-axis, decays on either side from there
@@ -139,8 +150,8 @@ vec2 distort( vec2 p ) {
 	// -- you get two orthogonal bands of perturbance, not a unified effect
 
 	vec2 q = p;
-	q.s += sin( dHeading ) * distortionY * easing;
-	q.t += cos( dHeading ) * distortionY * easing;
+	q.s += sin( dHeading ) * distortion * easing;
+	q.t += cos( dHeading ) * distortion * easing;
 
 	return q;
 }

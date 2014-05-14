@@ -9,11 +9,10 @@ import processing.video.*;
 // Clean up float / int thing in oscillator members
 
 // TOP TODO
-// VISUALIZER -- ADD DISTORTION -- less opaque when inactive etc
-// Finish distortion
+//
 // MAKE DISTORTION NOISE-CONTINGENT with minim?
 //
-// Add hooks to Distortion to allow oscillator-targeted distortion, e.g. for Leap ix
+// Add hooks to Distortion to allow oscillator-targeted distortion, e.g. for Leap interaction
 //
 // THEN: It's time to get to entrainment
 //
@@ -43,9 +42,7 @@ import processing.video.*;
 // Cross-frequency coupling ... something to try for another project
 
 
-// Ok, from the latest notes (19.4.14)--
-
-// millis() % 41 (pulsewidth) check to see if any oscillators are on the pulse
+// check to see if any oscillators are on the pulse
 // If so, they broadcast to others, which may entrain according to a phase response curve
 // Maximum phase response should be at antiphase from the on-pulse oscillator (cf Czeisler and Gooley 2007)
 // with phase delay (retardation) if it's before antiphase,
@@ -434,7 +431,10 @@ class Oscillator {
         sh.set( "period" + id, float(period) );
         sh.set( "phase" + id, float(phase) );
 
-        sh.set( "gain" + id, gain ); 
+        sh.set( "gain" + id, gain + (float) gaussian( 0., .0167 * gain ) );
+            // Modest noise in the strength of the gain
+            // -- 99 percent of the time it's ≤ 5 percent
+
         sh.set( "balance" + id, balance );
     }
 
