@@ -7,6 +7,7 @@ import processing.video.*;
 
 // Longer-term TODO --
 // Clean up float / int thing in oscillator members
+// Switch video streaming library -- something faster than the Quicktime API available?
 
 // TOP TODO
 //
@@ -60,6 +61,7 @@ import processing.video.*;
 
 // All response curves also have a Gaussian error term
 
+boolean record = false; // record frame data
 
 boolean showVisualizer = false;
 double updateRate = .125; // odds on a given frame we'll update oscillators
@@ -118,6 +120,10 @@ void draw() {
     rect( 0, 0, width, height );
 
     visualizer();
+    
+    if ( record ) {
+        saveFrame( "data/out/######.jpg" );
+    }
 }
 
 //

@@ -1,5 +1,7 @@
 // TODO
 //
+// Generate shader source from template at setup() based on nOscillators ?
+//
 // Start thinking about how distortion could be triggered by visitor activity ...
 // maybe certain activity increases the frequency, gain, etc
 // Maybe the distortion pulses should come in waves ... ?
@@ -88,7 +90,7 @@ float pulsePhase( float period, float phase, float halfpulse ) {
 	float phaseNear0 = abs( phase + ( period - relphase ) );
 	float phaseNear1 = abs( relphase + ( period - phase ) );
 
-    float distanceFromPulseCenter = min( min( basecase, phaseNear0 ), phaseNear1 );
+	float distanceFromPulseCenter = min( min( basecase, phaseNear0 ), phaseNear1 );
 
 	return clamp( halfpulse - distanceFromPulseCenter, 0., halfpulse ) / halfpulse;
 }
@@ -121,7 +123,7 @@ vec2 distort( vec2 p ) {
 /*
 	// Experiment in making the axis of perturbance orthongonal to the axis of the overall distortion
 	// The following is not really correct ... but probably not worth pursuing
-		
+
 	float orthogonal = dHeading - .5 * PI;
 	float axis0 = dYaxis * cos( dHeading );// + dYaxis * cos( dHeading );
 	float axis = p.s * sin( orthogonal ) + p.s * cos( orthogonal );
@@ -182,8 +184,6 @@ void main() {
 	//
 	// For each stream, do something special if its oscillator is on-pulse
 	// Right now the something special is just color-balanced brightness enhancement
-
-	// Inspired by http://glsl.heroku.com/e#15220.0
 
 	float pulsePhase0 = pulsePhase( period0, phase0, halfpulse0 );
 	float pulsePhase1 = pulsePhase( period1, phase1, halfpulse1 );

@@ -2,47 +2,49 @@
 	"fps": 60.,
 
 	"shader": "frag0",
-	
-	"distortion": {
-		"incidence":			.5,
 
-		"comment_":				"Two scaling factors, one for the lognormal, one applied to the result of the lognormal. mean(lognormal(0,.25)) ≈ 1",
-		"gain":					[ .25, .25 ],
-		"frequency":			[ .25, 500. ],
-		"decay":				[ .25, 10. ],
-		"duration":				[ .25, 2000. ],
+	"distortion": {
+		"incidence": .5,
+
+		"comment_": "Two scaling factors, one for the lognormal, one applied to the result of the lognormal. mean(lognormal(0,.25)) ≈ 1",
+		"gain": [ .25, .25 ],
+		"frequency": [ .25, 500. ],
+		"decay": [ .25, 10. ],
+		"duration": [ .25, 2000. ],
 	},
 
 	"default": {
-		"path":					"Mai 2014",
+		"path": "Mai 2014",
 
-		"halfpulse":			2000,
-		"period":				8000,
-		"phase":				.5,
-		"gain":					3.,
-		"gainThreshold":		.0,
-		"balance":				[ 1., 3., 3. ],
+		"halfpulse": 2000,
+		"period": 8000,
+		"phase": .5,
+		"gain":2.4,
+		"balance": [ 1., 1., 1. ],
 
-		"periodRC_hysteresis":	1.,
-		"gainRC_hysteresis":	1.,
+		"periodRC_hysteresis": 1.,
+		"gainRC_hysteresis": 1.,
 	},
 
 	"oscillators": [
 		{
-			"stream":				"stream 1",
-			"phase":				.2,
-			"period":				1000,
-			"halfpulse":			40,
-			"gain":					2.2,
-			"balance":				[ 1., 3., 1. ],
+			"stream": "stream 1",
+			"phase": .2,
+			"period": 4000,
+			"halfpulse": 400,
+			"balance": [ 3., 1., 1. ],
 		},
 		{
-			"stream":				"stream 2",
-			"halfpulse":			500.,
-			"phase":				.4,
+			"stream": "stream 2",
+			"halfpulse": 500.,
+			"phase": .4,
+            "balance": [ 1., 4., 4. ],
 		},
 		{
-			"stream":				"stream 3",
+			"stream": "stream 3",
+            "period": 1000,
+            "halfpulse": 200,
+            "balance": [ 2., 2., 1. ]
 		},
 	]
 }
