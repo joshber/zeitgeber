@@ -3,6 +3,8 @@
 import java.lang.Math;
 import java.util.Random;
 
+//import org.zeromq.ZMQ;
+
 import processing.video.*;
 
 // Longer-term TODO --
@@ -10,6 +12,11 @@ import processing.video.*;
 // Switch video streaming library -- something faster than the Quicktime API available?
 
 // TOP TODO
+//
+// Add numbers to visualizer -- Include fractional phase in Oscillator, just so we can reproduce it exactly in visualizer
+// Visualizer for distortion -- check to make sure it's doing what we want
+//
+// Oscillators need locations!
 //
 // MAKE DISTORTION NOISE-CONTINGENT with minim?
 //
@@ -68,6 +75,10 @@ double updateRate = .125; // odds on a given frame we'll update oscillators
 
 Random theRNG; // For generating noise terms
 
+/*ZMQ.Context zContext;
+ZMQ.Socket zPub;
+ZMQ.Socket zSub;
+*/
 PShader shadr;
 
 int nOscillators;
@@ -84,6 +95,9 @@ void setup() {
 
     theRNG = new Random( /* long seed */ );
 
+    //zContext = ZMQ.context( 1 );
+    // FIXME setup zPub and zSub
+
     loadConfig( true /* load streams */ );
 }
 
@@ -94,14 +108,15 @@ void draw() {
     if ( theRNG.nextDouble() < updateRate ) {
         // Check to see if any oscillators are on the pulse
         for ( int i = 0; i < nOscillators; ++i ) {
+            //
+            // Ok. This is where the next sprint happens:
+            // - Enqueue zeitgeber events for all in-pulse local oscillators
+            // - Dequeue queued zeitgebers and apply to all local oscillators
+
             double pulsePhase = oscillators[i].pulsePhase( millis() );
             if ( pulsePhase > 0 ) {
                 // TODO See if the other oscillators want to entrain to this one
             }
-
-            // TODO --
-            // - Enqueue zeitgeber in the ØMQ pipe
-            // - Handle enqueued zeitgeber
         }
 
         distortion.maybeDistort();
@@ -120,7 +135,8 @@ void draw() {
     rect( 0, 0, width, height );
 
     visualizer();
-    
+
+    // Comment out to save a branch op
     if ( record ) {
         saveFrame( "data/out/######.jpg" );
     }
@@ -147,6 +163,10 @@ void visualizer() {
     translate( 0, height - visualizerH );
 
     for ( int i = 0; i < nOscillators; ++i ) {
+        final float paddingL = 100.;
+        final float paddingR = 200.;
+        final float paddingLR = paddingL + paddingR;
+
         translate( 0, oscH );
 
         PVector balance = oscillators[i].balance;
@@ -156,31 +176,41 @@ void visualizer() {
         stroke( c );
         fill( c );
 
-        textAlign( RIGHT );
         textSize( 10 );
-        text( oscillators[i].name, 90, 1 );
+        textAlign( RIGHT );
+
+        text( oscillators[i].name, paddingL - 10., 1 ); // label the oscillator
 
         c = color(  oscillators[i].balance.x / denom, oscillators[i].balance.y / denom,
                     oscillators[i].balance.z / denom, .5 );
-        line( 100, 0, width - 100, 0 );
+        line( paddingL, 0, width - paddingR, 0 );
 
         int period = oscillators[i].period;
+
+        // Show the period, pulse radius, and gain
+        text( period, width - paddingR + 40., 1 );
+        text( oscillators[i].halfpulse, width - paddingR + 70., 1 );
+        text( oscillators[i].gain, width - paddingR + 150., 1 );
 
         //
         // Mark the pulse region
 
-        float scaledHalfpulse = map( oscillators[i].halfpulse, 0, period, 0, width - 200 );
-        float scaledPhaseCenter = map( oscillators[i].phase, 0, period, 0, width - 200 );
+        float scaledHalfpulse = map( oscillators[i].halfpulse, 0, period, 0, width - paddingLR );
+        float scaledPhaseCenter = map( oscillators[i].phase, 0, period, 0, width - paddingLR );
 
         // FIXME: Can we do this without branching logic?
         float scaledStart = scaledPhaseCenter - scaledHalfpulse;
         if ( scaledStart < 0. )
-            scaledStart = width - 200 + scaledStart;
-        float scaledEnd = ( scaledPhaseCenter + scaledHalfpulse ) % ( width - 200 );
+            scaledStart = width - paddingR + scaledStart;
+        float scaledEnd = ( scaledPhaseCenter + scaledHalfpulse ) % ( width - paddingLR );
 
-        line( 100 + scaledPhaseCenter, 1., 100 + scaledPhaseCenter, 5. );
-        line( 100 + scaledStart, 1., 100 + scaledStart, 3. );
-        line( 100 + scaledEnd, 1., 100 + scaledEnd, 3. );
+        line( paddingL + scaledPhaseCenter, 1., paddingL + scaledPhaseCenter, 5. );
+        line( paddingL + scaledStart, 1., paddingL + scaledStart, 3. );
+        line( paddingL + scaledEnd, 1., paddingL + scaledEnd, 3. );
+
+        textAlign( CENTER );
+        text( float( oscillators[i].phase ) / float( period ), paddingL + scaledPhaseCenter + 5., 14. );
+            // Show the relative phase of the pulse
 
         // Dot contour for the pulse
         for ( int j = 0; j < 5; ++j ) {
@@ -197,7 +227,7 @@ void visualizer() {
 
             float pulse = -(oscH - 15.) * ( .5 + .5 * sin( scaledPhase ) );
 
-            ellipse( map( t % period, 0, period, 100, width - 100 ), pulse, 3, 3 );
+            ellipse( map( t % period, 0, period, paddingL, width - paddingR ), pulse, 3, 3 );
         }
     }
 
@@ -239,7 +269,7 @@ void reloadConfig() {
 }
 
 void loadConfig( boolean loadStreams ) {
-    JSONObject config = loadJSONObject( "config.json" );
+    JSONObject config = loadJSONObject( "config/config.json" );
 
     frameRate( config.getFloat( "fps" ) );
 
@@ -267,6 +297,21 @@ void loadConfig( boolean loadStreams ) {
     float periodRCHDef = defaultOsc.getFloat( "periodRC_hysteresis" );
     float gainRCHDef = defaultOsc.getFloat( "gainRC_hysteresis" );
 
+    //
+    // Default location parameter is optional -- if not present, defaults to origin
+    // These locations are in a virtual R3 so we can define a distance function
+    // to attenuate palpability of a pulse zeitgeber on neighboring oscillators
+
+    PVector locationDef;
+    if ( defaultOsc.hasKey( "location") ) {
+        JSONArray locDef = defaultOsc.getJSONArray( "location" );
+        locationDef = new PVector( locDef.getFloat( 0 ), locDef.getFloat( 1 ), locDef.getFloat( 2 ) );
+    }
+    else {
+        locationDef = new PVector( 0., 0., 0. );
+    }
+
+    // Where within the Data folder tree do we find the streams?
     String streamPath = "";
     if ( loadStreams ) {
         streamPath = defaultOsc.getString( "path" );
@@ -311,15 +356,33 @@ void loadConfig( boolean loadStreams ) {
         int period = osc.hasKey( "period" ) ? osc.getInt( "period" ) : periodDef;
         float phase = osc.hasKey( "phase" ) ? osc.getFloat( "phase" ) : phaseDef;
         float gain = osc.hasKey( "gain" ) ? osc.getFloat( "gain" ) : gainDef;
+
         PVector balance;
         if ( osc.hasKey( "balance" ) ) {
             JSONArray blnc = osc.getJSONArray( "balance" );
             balance = new PVector( blnc.getFloat( 0 ), blnc.getFloat( 1 ), blnc.getFloat( 2 ) );
-        } else {
+        }
+        else {
             balance = balanceDef;
         }
+
         float periodRCH = osc.hasKey( "periodRC_hysteresis" ) ? osc.getFloat( "periodRC_hysteresis" ) : periodRCHDef;
         float gainRCH = osc.hasKey( "gainRC_hysteresis" ) ? osc.getFloat( "gainRC_hysteresis" ) : gainRCHDef;
+
+        //
+        // Maybe you'll want to treat all oscillators in a single instance as situated at the same point in space
+        // But it doesn't cost us anything to allow you spread them out
+        // -- we treat pulse zeitgeber perception within a single instance
+        // the same as between instances
+
+        PVector location;
+        if ( osc.hasKey( "location" ) ) {
+            JSONArray loc = osc.getJSONArray( "location" );
+            location = new PVector( loc.getFloat( 0 ), loc.getFloat( 1 ), loc.getFloat( 2 ) );
+        }
+        else {
+            location = locationDef;
+        }
 
         Movie s = null;
         String streamHandle = "";
@@ -336,12 +399,13 @@ void loadConfig( boolean loadStreams ) {
                                             i,              // id
                                             streamHandle,   // name
                                             s,              // video stream
+                                            location,
                                             halfpulse,
-                                            period, 
-                                            phase, 
-                                            gain,  
-                                            balance, 
-                                            periodRCH, 
+                                            period,
+                                            phase,
+                                            gain,
+                                            balance,
+                                            periodRCH,
                                             gainRCH
                                 );
         }
@@ -349,12 +413,13 @@ void loadConfig( boolean loadStreams ) {
             // A little crude, but I'd rather not muck around with move semantics
             // (i.e., moving Movies to new oscillators)
             oscillators[i].reconfig(
-                                    halfpulse, 
-                                    period, 
-                                    phase, 
+                                    location,
+                                    halfpulse,
+                                    period,
+                                    phase,
                                     gain,
-                                    balance, 
-                                    periodRCH, 
+                                    balance,
+                                    periodRCH,
                                     gainRCH
                             );
         }
@@ -382,6 +447,8 @@ class Oscillator {
 
     Movie s;
 
+    PVector location; // virtual R3 so we can define physics of mutual visibility between oscillators
+
     int halfpulse; // Radius in milliseconds
 
     int period, phase; // in ms
@@ -394,25 +461,31 @@ class Oscillator {
 
     Oscillator() { }
 
-    Oscillator( int id_, String name_, Movie s_, 
+    Oscillator( int id_, String name_, Movie s_,
+                PVector location_,
                 int halfpulse_,
-                int period_, float phase_, 
-                float gain_, PVector balance_, 
+                int period_, float phase_,
+                float gain_, PVector balance_,
                 float perRCH, float gainRCH
-            ) {
+            )
+    {
         id = id_;
         name = name_;
         s = s_;
 
-        reconfig( halfpulse_, period_, phase_, gain_, balance_, perRCH, gainRCH );
+        reconfig( location_, halfpulse_, period_, phase_, gain_, balance_, perRCH, gainRCH );
     }
 
     void reconfig (
+                PVector location_,
                 int halfpulse_,
-                int period_, float phase_, 
-                float gain_, PVector balance_, 
+                int period_, float phase_,
+                float gain_, PVector balance_,
                 float perRCH, float gainRCH
-            ) {        
+            )
+    {
+        location = location_;
+
         halfpulse = halfpulse_;
 
         period = period_;
@@ -513,7 +586,7 @@ class Distortion {
                     float decayM_, float decayS_, float durationM_, float durationS_
             ) {
         // Scale for rate of oscillator update -- see draw()
-        incidence = incidence_  / (float)( updateRate ) / frameRate; 
+        incidence = incidence_  / (float)( updateRate ) / frameRate;
         gainM = gainM_;
         gainS = gainS_;
         freqM = freqM_;

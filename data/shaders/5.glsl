@@ -12,6 +12,20 @@
 // Each stream could take one of each ...
 // Might be too complex to implement just yet
 
+// ANOTHER Thought --
+// Keep oscillator:stream 1:1 for this iteration (i.e., Khoj and ISEA 2015)
+// Keep distortion non-oscillatory -- it's going to be keyed (stochastically) to ambient noise
+// BUT, create TWO KINDS of oscillator pulse functions
+// Brightness enhancement is one
+// Blur is the other
+// Pass in per-oscillator flags indicating which to use
+// The problem would be, it's difficult to implement decent dynamic range with blur
+// GLSL Mats are limited to 5x5, so sampling beyond a radius of 2 would be expensive
+// -- either you use arrays, or you could use a pair of vec4s (say, blurring only in the x dimension)
+// Would saturation really be more noticeable than with brightness enhancement?
+// Maybe two vec4s would work nicely. Saturation would mean "weight at uv ± 4px == weight at uv"
+// So you define a "decay from origin" power fn that is noticeable at gain = 2 and saturates at gain ≈ 20?
+
 
 // Zeitgeber v0.0001
 
@@ -158,8 +172,6 @@ vec2 distort( vec2 p ) {
 	float midpoint = dStart + .5 * ( dEnd - dStart );
 	float phase = ( midpoint - time ) / ( midpoint - dStart );
 	float easing = .5 + .5 * sin( PI * ( phase - .5 ) );
-
-	// FIXME: is GLSL pass-by-value for vecN unless you use inout in the parameter prototype?
 
 	//
 	// Note we're using x-dimension perturbance for both dimensions here
