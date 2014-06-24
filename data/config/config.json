@@ -15,13 +15,13 @@
 
 	"default": {
 		"path": "Juni 2014/mov",
-		
+
 		"location": [ 0., 0., 0. ],
 
 		"halfpulse": 200,
 		"period": 2000,
 		"phase": .5,
-		"gain":10.,
+		"gain": 10.,
 		"balance": [ 1., 1., 1. ],
 
 		"periodRC_hysteresis": 1.,

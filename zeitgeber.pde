@@ -3,7 +3,7 @@
 import java.lang.Math;
 import java.util.Random;
 
-//import org.zeromq.ZMQ;
+import org.zeromq.ZMQ;
 
 import processing.video.*;
 
@@ -13,10 +13,7 @@ import processing.video.*;
 
 // TOP TODO
 //
-// Add numbers to visualizer -- Include fractional phase in Oscillator, just so we can reproduce it exactly in visualizer
-// Visualizer for distortion -- check to make sure it's doing what we want
-//
-// Oscillators need locations!
+// New Digital Oceans droplet in Singapore to manage PUB-SUB proxy?
 //
 // MAKE DISTORTION NOISE-CONTINGENT with minim?
 //
@@ -75,10 +72,13 @@ double updateRate = .125; // odds on a given frame we'll update oscillators
 
 Random theRNG; // For generating noise terms
 
-/*ZMQ.Context zContext;
+ZMQ.Context zContext;
 ZMQ.Socket zPub;
 ZMQ.Socket zSub;
-*/
+String proxyIP = "188.226.233.222";
+    // Digital Ocean droplet Llama (Amsterdam)
+    // https://cloud.digitalocean.com/droplets/1559653
+
 PShader shadr;
 
 int nOscillators;
@@ -95,8 +95,16 @@ void setup() {
 
     theRNG = new Random( /* long seed */ );
 
-    //zContext = ZMQ.context( 1 );
-    // FIXME setup zPub and zSub
+    //
+    // Set up our network topology!
+    // Each instance gets a PUB and a SUB that connect to a proxy
+    // On the proxy, corresponding XSUB and XPUB sockets bind to *:7506 and *:7507 respectively
+
+    zContext = ZMQ.context( 1 );
+    zPub = zContext.socket( ZMQ.PUB );
+    zSub = zContext.socket( ZMQ.SUB );
+    zPub.connect( "tcp://" + proxyIP + ":7506" );
+    zSub.connect( "tcp://" + proxyIP + ":7507" );
 
     loadConfig( true /* load streams */ );
 }
@@ -187,10 +195,16 @@ void visualizer() {
 
         int period = oscillators[i].period;
 
-        // Show the period, pulse radius, and gain
+        // Show period, pulse radius, and gain
         text( period, width - paddingR + 40., 1 );
         text( oscillators[i].halfpulse, width - paddingR + 70., 1 );
-        text( oscillators[i].gain, width - paddingR + 150., 1 );
+        text( oscillators[i].gain, width - paddingR + 110., 1 );
+            // Gain is just a rough guide, since color balance modifies it
+            // But color balance does not change -- and that's what we need to track, the change in gain
+
+        // Show location
+        PVector loc = oscillators[i].location;
+        text( loc.x + " " + loc.y + " " + loc.z, width - paddingR + 180., 1 );
 
         //
         // Mark the pulse region
