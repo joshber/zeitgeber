@@ -75,9 +75,13 @@ Random theRNG; // For generating noise terms
 ZMQ.Context zContext;
 ZMQ.Socket zPub;
 ZMQ.Socket zSub;
-String proxyIP = "188.226.233.222";
+final String proxyIP = "188.226.233.222";
     // Digital Ocean droplet Llama (Amsterdam)
     // https://cloud.digitalocean.com/droplets/1559653
+
+// TCP ports to connect PUB and SUB sockets to the proxy
+final String toXSUB = "7506";
+final String fromXPUB = "7507";
 
 PShader shadr;
 
@@ -103,8 +107,8 @@ void setup() {
     zContext = ZMQ.context( 1 );
     zPub = zContext.socket( ZMQ.PUB );
     zSub = zContext.socket( ZMQ.SUB );
-    zPub.connect( "tcp://" + proxyIP + ":7506" );
-    zSub.connect( "tcp://" + proxyIP + ":7507" );
+    zPub.connect( "tcp://" + proxyIP + ":" + toXSUB );
+    zSub.connect( "tcp://" + proxyIP + ":" + fromXPUB );
 
     loadConfig( true /* load streams */ );
 }
