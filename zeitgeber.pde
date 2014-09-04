@@ -11,7 +11,16 @@ import processing.video.*;
 // Clean up float / int thing in oscillator members
 // Switch video streaming library -- something faster than the Quicktime API available?
 
-// TOP TODO
+// TODO NEXT STEPS
+//
+// 0. Encapsulate zeitgebers? class ZgEvent, class ZgAmbient
+// 1. On pulse, oscillators should be PUBing event zeitgebers to the proxy
+//    -- JSON including
+//       - Gain (color-weighted -- RGB avg? max?)
+//       - Location
+//       - ???
+// 2. On update sweep, check for zeitgebers in the SUB queue
+// 3. Gradient entrainment as described below, plus attenuated for virtual distance
 //
 // New Digital Oceans droplet in Singapore to manage PUB-SUB proxy?
 //
@@ -28,15 +37,8 @@ import processing.video.*;
 // over time
 // Underlying practical question: If the environment gets quieter than it was originally,
 // will the period and gain get lower, or is the configured period/gain a floor?
-//
-// THEN: Add entrainment etc
-//
-// PLUS--
-// Go up to 8 streams
-
 
 // Two kinds of zeitgeber, ambient and event (pulse -- i.e., sudden sensor event)
-
 // Period and gain change only in response to ambient zeitgeber, something like Temperature--
 // Could be noise in the room or total sensor activity ...
 // Period and gain have response curves, something like Perlin's Hermite + Gaussian noise term
