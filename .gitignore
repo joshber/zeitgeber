@@ -1,2 +1,8 @@
+*.jpg
 *.mov
 *.mp4
+*.rar
+*.tmp
+data/streams
+data/out
+build-tmp
